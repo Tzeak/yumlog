@@ -1,241 +1,177 @@
-# 🍽️ Yumlog
+# 🍽️ yumlog
 
-A modern food logging application that uses AI to analyze food photos and provide detailed nutritional information. Built with React, Node.js, and OpenAI's GPT-4 Vision API.
+you eat food  
+you take a picture  
+yumlog guesses what it is and tells you what’s in it  
 
-## ✨ Features
+uses gpt-4 vision to analyze your meals  
+built with node + react + sqlite  
+all local, no cloud bloat
 
-- **📸 AI-Powered Food Analysis**: Upload photos of your meals and get instant nutritional breakdown
-- **🎯 Detailed Macros**: Get protein, carbs, fat, fiber, and sugar content
-- **📊 Daily Analytics**: Track your daily calorie and macro intake with beautiful charts
-- **📋 Meal History**: View and manage your past meals
-- **📱 Responsive Design**: Works perfectly on desktop and mobile devices
-- **🔒 Local Storage**: All data stored locally with SQLite database
-- **🖱️ Drag & Drop**: Easy file upload with drag and drop support
+## what it does
 
-## 🚀 Quick Start
+- snap a photo of your food → get back estimated macros  
+- logs everything locally, keeps a meal history  
+- tracks your daily protein/carb/fat/sugar intake  
+- drag and drop interface, works on your phone  
+- runs offline (mostly), db is just a local sqlite file  
+- no logins, no accounts, no bullshit
 
-### Prerequisites
+## getting started
 
-- Node.js (v16 or higher)
+you’ll need:
+
+- node.js (v16+)
 - npm or yarn
-- OpenAI API key
+- an openai api key w/ image access
 
-### Installation
+### install it
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd yumlog
-   ```
+```bash
+git clone <repo>
+cd yumlog
+```
 
-2. **Install dependencies**
-   ```bash
-   # Install server dependencies
-   npm install
-   
-   # Install client dependencies
-   cd client
-   npm install
-   cd ..
-   ```
+```bash
+npm install           # server deps
+cd client && npm i    # client deps
+cd ..
+```
 
-3. **Set up environment variables**
-   ```bash
-   # Copy the example environment file
-   cp env.example .env
-   
-   # Edit .env and add your OpenAI API key
-   OPENAI_API_KEY=your_openai_api_key_here
-   ```
+copy the example env and drop your openai key in
 
-4. **Start the application**
-   ```bash
-   # Start the backend server (in one terminal)
-   npm run dev
-   
-   # Start the frontend (in another terminal)
-   npm run client
-   ```
-
-5. **Open your browser**
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:3001
-
-## 🔧 Configuration
-
-### Environment Variables
-
-Create a `.env` file in the root directory with the following variables:
+```bash
+cp env.example .env
+```
 
 ```env
-# OpenAI API Configuration
-OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_API_KEY=sk-...
+```
 
-# Server Configuration
+### run it
+
+```bash
+# terminal 1
+npm run dev
+
+# terminal 2
+npm run client
+```
+
+open your browser:
+
+- frontend: http://localhost:3000  
+- backend: http://localhost:3001
+
+## env config
+
+here’s what’s in `.env`:
+
+```env
+OPENAI_API_KEY=your key here
 PORT=3001
 NODE_ENV=development
-
-# Database Configuration
 DB_PATH=./data/yumlog.db
-
-# File Upload Configuration
 UPLOAD_DIR=./uploads
 MAX_FILE_SIZE=10485760
 ```
 
-### Getting an OpenAI API Key
+## how to use it
 
-1. Go to [OpenAI Platform](https://platform.openai.com/)
-2. Sign up or log in to your account
-3. Navigate to API Keys section
-4. Create a new API key
-5. Copy the key and add it to your `.env` file
+1. drag an image in or upload one  
+2. click “analyze”  
+3. wait for ai to figure out what you’re eating  
 
-## 📱 Usage
+you’ll get back something like:
 
-### Uploading Food Photos
+- calories
+- macros (protein, carbs, fat, fiber, sugar)
+- rough ingredient list
+- vibes-based AI notes
 
-1. Click the **Upload Photo** tab
-2. Click the upload area or drag & drop an image file
-3. Supported formats: JPG, PNG, GIF, WEBP (max 10MB)
-4. Click **Analyze Food** to get nutritional information
+every meal gets logged  
+go to the history tab to browse or delete stuff  
+daily tab gives you graphs n stuff
 
-### Viewing Results
-
-After analysis, you'll see:
-- **Total calories** for the meal
-- **Macronutrient breakdown** (protein, carbs, fat, fiber, sugar)
-- **Individual food items** detected with their portions
-- **AI notes** about the meal
-
-### Managing Meals
-
-- **History Tab**: View all your past meals with timestamps
-- **Analytics Tab**: See daily totals and macronutrient distribution charts
-- **Delete Meals**: Click the trash icon to remove meals from your history
-
-## 🏗️ Architecture
-
-### Backend (Node.js/Express)
-
-- **Server**: Express.js with CORS and file upload support
-- **Database**: SQLite for local data storage
-- **AI Integration**: OpenAI GPT-4 Vision API for food analysis
-- **File Storage**: Local file system for image storage
-
-### Frontend (React)
-
-- **UI Framework**: React with modern hooks
-- **Styling**: Custom CSS with responsive design
-- **Charts**: Recharts for data visualization
-- **Icons**: Lucide React for beautiful icons
-- **HTTP Client**: Axios for API communication
-- **File Upload**: Native HTML5 file input with drag & drop
-
-### Key Components
+## folders
 
 ```
-├── server/
-│   ├── index.js              # Main Express server
-│   └── services/
-│       ├── openai.js         # OpenAI API integration
-│       └── database.js       # SQLite database operations
-├── client/
-│   ├── src/
-│   │   ├── App.js           # Main React component
-│   │   ├── index.js         # React entry point
-│   │   └── index.css        # Global styles
-│   └── public/
-│       └── index.html       # HTML template
-└── uploads/                 # Image storage directory
+server/
+├── index.js               ← express app
+├── services/
+│   ├── openai.js          ← sends image to gpt
+│   └── database.js        ← sqlite logic
+
+client/
+├── src/
+│   ├── App.js             ← main react component
+│   ├── index.js           ← entry point
+│   └── index.css          ← styling
+└── public/
+    └── index.html         ← html template
+
+uploads/                   ← where your meal pics go
 ```
 
-## 🔍 API Endpoints
+## api
 
-### Health Check
-- `GET /api/health` - Check server status
+```
+GET    /api/health           → is the server up  
+POST   /api/analyze-food     → send food image, get analysis  
+GET    /api/meals            → get meal history  
+DELETE /api/meals/:id        → delete a meal  
+GET    /uploads/:filename    → serve image files  
+```
 
-### Food Analysis
-- `POST /api/analyze-food` - Upload and analyze food image
-- `GET /api/meals` - Get all meals
-- `DELETE /api/meals/:id` - Delete a specific meal
+## if shit breaks
 
-### File Serving
-- `GET /uploads/:filename` - Serve uploaded images
+### uploads not working?
 
-## 🎨 Customization
+- is it under 10mb?  
+- is it a valid image file?  
+- does `uploads/` have write perms?
 
-### Styling
-The app uses a modern gradient design with purple/blue theme. You can customize colors in:
-- `client/src/index.css` - Main styles
-- `client/public/index.html` - Background gradient
+### api errors?
 
-### AI Analysis
-Modify the AI prompt in `server/services/openai.js` to change how the AI analyzes food images.
+- check if your key is right  
+- check if you’ve got quota  
+- check your model access
 
-### Database Schema
-The SQLite schema is defined in `server/services/database.js`. You can add new fields or tables as needed.
+### sqlite won’t write?
 
-## 🚨 Troubleshooting
+- is `data/` folder writable?  
+- try restarting the backend
 
-### Common Issues
+## dev tips
 
-1. **File upload not working**
-   - Check file size (max 10MB)
-   - Ensure image format is supported (JPEG, PNG, GIF, WEBP)
-   - Verify uploads directory has write permissions
-   - Try refreshing the page
+- backend restarts: `npm run dev`  
+- frontend hot reloads: `npm run client`  
+- open devtools and network tab if things feel weird  
+- logs go to console
 
-2. **OpenAI API errors**
-   - Verify your API key is correct
-   - Check your OpenAI account has sufficient credits
-   - Ensure you're using a supported model
+## todo (maybe)
 
-3. **Image analysis fails**
-   - Check file size (max 10MB)
-   - Ensure image format is supported (JPEG, PNG, etc.)
-   - Verify uploads directory has write permissions
+- auth / user profiles  
+- better food parsing / ai prompt tuning  
+- mobile app  
+- export to csv  
+- recipe gen  
+- barcode scanner  
+- social / share meals  
+- sync with fitness stuff
 
-4. **Database errors**
-   - Check the data directory exists and is writable
-   - Restart the server to reinitialize the database
+## license
 
-### Development Tips
+MIT lol use it or don’t
 
-- Use `npm run dev` for backend development with auto-restart
-- Check browser console for frontend errors
-- Monitor server logs for backend issues
-- Use browser dev tools to inspect network requests
+## credit
 
-## 📈 Future Enhancements
-
-- [ ] User authentication and profiles
-- [ ] Meal planning and recipes
-- [ ] Barcode scanning for packaged foods
-- [ ] Export data to CSV/PDF
-- [ ] Mobile app (React Native)
-- [ ] Social features and sharing
-- [ ] Integration with fitness trackers
-- [ ] Advanced analytics and trends
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🙏 Acknowledgments
-
-- OpenAI for providing the GPT-4 Vision API
-- React team for the amazing framework
-- The open-source community for various libraries used
+- openai for the image model  
+- all the open source libs that do the real work  
+- you, for trying to eat better probably
 
 ---
 
-**Note**: This app is for educational and personal use. Always consult with healthcare professionals for accurate nutritional advice. 
+this is a personal project  
+not medical advice  
+don’t sue me if it thinks your tiramisu is beef stew
