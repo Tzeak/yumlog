@@ -1,0 +1,29 @@
+{
+  "name": "calorie-tracking-app",
+  "version": "1.0.0",
+  "description": "Yumlog - AI-powered food logging app that analyzes food photos",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "nodemon server/index.js",
+    "client": "cd client && npm start",
+    "build": "cd client && npm run build",
+    "install-all": "npm install && cd client && npm install"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "multer": "^1.4.5-lts.1",
+    "openai": "^4.20.1",
+    "sqlite3": "^5.1.6",
+    "dotenv": "^16.3.1",
+    "uuid": "^9.0.1",
+    "sharp": "^0.32.6"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": ["calorie", "tracking", "ai", "food", "nutrition"],
+  "author": "Your Name",
+  "license": "MIT"
+} 
