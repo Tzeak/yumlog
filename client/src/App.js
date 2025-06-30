@@ -15,7 +15,7 @@ const api = axios.create({
 function AppContent() {
   const { user, isSignedIn, isLoaded } = useUser();
   const { getToken } = useAuth();
-  const { signOut, setActive } = useClerk();
+  const { signOut } = useClerk();
   const [activeTab, setActiveTab] = useState('upload');
   const [showSettings, setShowSettings] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
@@ -995,7 +995,17 @@ function PasskeyList() {
 function App() {
   const publishableKey = process.env.REACT_APP_CLERK_PUBLISHABLE_KEY;
   
+  // Add detailed logging for debugging
+  console.log('🔍 Clerk Environment Debug Info:');
+  console.log('- REACT_APP_CLERK_PUBLISHABLE_KEY:', publishableKey ? `${publishableKey.substring(0, 20)}...` : 'NOT SET');
+  console.log('- All REACT_APP_ env vars:', Object.keys(process.env).filter(key => key.startsWith('REACT_APP_')));
+  console.log('- Node environment:', process.env.NODE_ENV);
+  console.log('- Current URL:', window.location.href);
+  
   if (!publishableKey) {
+    console.error('❌ Clerk publishable key is missing!');
+    console.error('Environment variables available:', Object.keys(process.env));
+    
     return (
       <div style={{ 
         display: 'flex', 
@@ -1003,12 +1013,84 @@ function App() {
         alignItems: 'center', 
         height: '100vh',
         fontSize: '18px',
-        color: '#667eea'
+        color: '#667eea',
+        flexDirection: 'column',
+        padding: '20px',
+        textAlign: 'center'
       }}>
-        Error: Clerk publishable key not found. Please check your environment variables.
+        <h2 style={{ marginBottom: '20px' }}>🔑 Configuration Error</h2>
+        <p style={{ marginBottom: '20px' }}>
+          Clerk publishable key not found. Please check your environment variables.
+        </p>
+        <div style={{ 
+          background: '#f8f9fa', 
+          padding: '20px', 
+          borderRadius: '8px',
+          fontSize: '14px',
+          textAlign: 'left',
+          maxWidth: '600px'
+        }}>
+          <h4>Debug Information:</h4>
+          <ul style={{ margin: '10px 0', paddingLeft: '20px' }}>
+            <li>Environment: {process.env.NODE_ENV}</li>
+            <li>URL: {window.location.href}</li>
+            <li>REACT_APP_ variables: {Object.keys(process.env).filter(key => key.startsWith('REACT_APP_')).join(', ') || 'None found'}</li>
+          </ul>
+          <h4>How to fix:</h4>
+          <ol style={{ margin: '10px 0', paddingLeft: '20px' }}>
+            <li>Check if <code>.env</code> file exists in the client directory</li>
+            <li>Verify <code>REACT_APP_CLERK_PUBLISHABLE_KEY</code> is set correctly</li>
+            <li>Restart the development server after changing environment variables</li>
+            <li>For production, ensure the environment variable is set in your hosting platform</li>
+          </ol>
+        </div>
       </div>
     );
   }
+
+  // Validate the key format
+  if (!publishableKey.startsWith('pk_')) {
+    console.error('❌ Invalid Clerk publishable key format!');
+    console.error('Key should start with "pk_test_" or "pk_live_"');
+    
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        fontSize: '18px',
+        color: '#dc3545',
+        flexDirection: 'column',
+        padding: '20px',
+        textAlign: 'center'
+      }}>
+        <h2 style={{ marginBottom: '20px' }}>🔑 Invalid Key Format</h2>
+        <p style={{ marginBottom: '20px' }}>
+          Clerk publishable key has invalid format. Key should start with "pk_test_" or "pk_live_".
+        </p>
+        <div style={{ 
+          background: '#f8d7da', 
+          padding: '20px', 
+          borderRadius: '8px',
+          fontSize: '14px',
+          textAlign: 'left',
+          maxWidth: '600px'
+        }}>
+          <h4>Current key format:</h4>
+          <code style={{ background: '#fff', padding: '4px 8px', borderRadius: '4px' }}>
+            {publishableKey.substring(0, 20)}...
+          </code>
+          <h4 style={{ marginTop: '16px' }}>Expected format:</h4>
+          <code style={{ background: '#fff', padding: '4px 8px', borderRadius: '4px' }}>
+            pk_test_... or pk_live_...
+          </code>
+        </div>
+      </div>
+    );
+  }
+
+  console.log('✅ Clerk publishable key found and validated');
 
   return (
     <ClerkProvider publishableKey={publishableKey}>
