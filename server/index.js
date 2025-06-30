@@ -6,7 +6,7 @@ const fs = require('fs');
 require('dotenv').config();
 
 const { analyzeFoodImage } = require('./services/openai');
-const { initDatabase, saveMeal, getMeals, deleteMeal } = require('./services/database');
+const { initDatabase, saveMeal, getMeals, deleteMeal, createOrUpdateUser, getUserById } = require('./services/database');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -50,13 +50,44 @@ const upload = multer({
 // Initialize database
 initDatabase();
 
+// Authentication middleware
+const authenticateUser = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'No authorization token provided' });
+    }
+    
+    const token = authHeader.substring(7);
+    
+    // For now, we'll use a simple token format: "user_id:phone_number"
+    // In production, you should verify the token with Clerk's API
+    const [userId, phoneNumber] = token.split(':');
+    
+    if (!userId || !phoneNumber) {
+      return res.status(401).json({ error: 'Invalid token format' });
+    }
+    
+    // Create or update user in database
+    await createOrUpdateUser(userId, phoneNumber);
+    
+    // Add user info to request
+    req.user = { id: userId, phoneNumber };
+    next();
+  } catch (error) {
+    console.error('Authentication error:', error);
+    res.status(401).json({ error: 'Authentication failed' });
+  }
+};
+
 // Routes
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Yumlog API is running' });
 });
 
 // Upload and analyze food image
-app.post('/api/analyze-food', upload.single('image'), async (req, res) => {
+app.post('/api/analyze-food', authenticateUser, upload.single('image'), async (req, res) => {
   try {
     console.log('🔍 Starting food analysis request...');
     
@@ -100,6 +131,7 @@ app.post('/api/analyze-food', upload.single('image'), async (req, res) => {
     // Save the meal to database
     console.log('💾 Saving meal to database...');
     const mealId = await saveMeal({
+      userId: req.user.id,
       imagePath: req.file.filename,
       analysis: analysis,
       note: note,
@@ -123,10 +155,10 @@ app.post('/api/analyze-food', upload.single('image'), async (req, res) => {
   }
 });
 
-// Get all meals
-app.get('/api/meals', async (req, res) => {
+// Get all meals for authenticated user
+app.get('/api/meals', authenticateUser, async (req, res) => {
   try {
-    const meals = await getMeals();
+    const meals = await getMeals(req.user.id);
     res.json({ meals });
   } catch (error) {
     console.error('Error fetching meals:', error);
@@ -134,15 +166,26 @@ app.get('/api/meals', async (req, res) => {
   }
 });
 
-// Delete a meal
-app.delete('/api/meals/:id', async (req, res) => {
+// Delete a meal (only if owned by authenticated user)
+app.delete('/api/meals/:id', authenticateUser, async (req, res) => {
   try {
     const mealId = req.params.id;
-    await deleteMeal(mealId);
+    await deleteMeal(mealId, req.user.id);
     res.json({ success: true, message: 'Meal deleted successfully' });
   } catch (error) {
     console.error('Error deleting meal:', error);
     res.status(500).json({ error: 'Failed to delete meal' });
+  }
+});
+
+// Get user profile
+app.get('/api/user/profile', authenticateUser, async (req, res) => {
+  try {
+    const user = await getUserById(req.user.id);
+    res.json({ user });
+  } catch (error) {
+    console.error('Error fetching user profile:', error);
+    res.status(500).json({ error: 'Failed to fetch user profile' });
   }
 });
 

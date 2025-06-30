@@ -2,11 +2,11 @@
 
 you eat food  
 you take a picture  
-yumlog guesses what it is and tells you what’s in it  
+yumlog guesses what it is and tells you what's in it  
 
 uses gpt-4 vision to analyze your meals  
 built with node + react + sqlite  
-all local, no cloud bloat
+now with user authentication via Clerk.dev
 
 ## what it does
 
@@ -14,16 +14,18 @@ all local, no cloud bloat
 - logs everything locally, keeps a meal history  
 - tracks your daily protein/carb/fat/sugar intake  
 - drag and drop interface, works on your phone  
+- user authentication with phone numbers via Clerk.dev
+- each user has their own private meal log
 - runs offline (mostly), db is just a local sqlite file  
-- no logins, no accounts, no bullshit
 
 ## getting started
 
-you’ll need:
+you'll need:
 
 - node.js (v16+)
 - npm or yarn
 - an openai api key w/ image access
+- a clerk.dev account for authentication
 
 ### install it
 
@@ -38,7 +40,7 @@ cd client && npm i    # client deps
 cd ..
 ```
 
-copy the example env and drop your openai key in
+copy the example env and drop your keys in
 
 ```bash
 cp env.example .env
@@ -46,7 +48,19 @@ cp env.example .env
 
 ```env
 OPENAI_API_KEY=sk-...
+VITE_CLERK_PUBLISHABLE_KEY=pk_test_...
+REACT_APP_CLERK_PUBLISHABLE_KEY=pk_test_...
 ```
+
+### set up clerk.dev
+
+1. Go to [clerk.dev](https://clerk.dev) and create an account
+2. Create a new application
+3. Enable phone number authentication
+4. Copy your publishable key to the .env file
+5. Configure your application settings as needed
+
+**Quick setup:** Run `npm run setup-auth` and follow the prompts to automatically configure your Clerk key.
 
 ### run it
 
@@ -65,7 +79,7 @@ open your browser:
 
 ## env config
 
-here’s what’s in `.env`:
+here's what's in `.env`:
 
 ```env
 OPENAI_API_KEY=your key here
@@ -74,22 +88,25 @@ NODE_ENV=development
 DB_PATH=./data/yumlog.db
 UPLOAD_DIR=./uploads
 MAX_FILE_SIZE=10485760
+VITE_CLERK_PUBLISHABLE_KEY=your_clerk_key
+REACT_APP_CLERK_PUBLISHABLE_KEY=your_clerk_key
 ```
 
 ## how to use it
 
-1. drag an image in or upload one  
-2. click “analyze”  
-3. wait for ai to figure out what you’re eating  
+1. sign in with your phone number
+2. drag an image in or upload one  
+3. click "analyze"  
+4. wait for ai to figure out what you're eating  
 
-you’ll get back something like:
+you'll get back something like:
 
 - calories
 - macros (protein, carbs, fat, fiber, sugar)
 - rough ingredient list
 - vibes-based AI notes
 
-every meal gets logged  
+every meal gets logged to your personal account  
 go to the history tab to browse or delete stuff  
 daily tab gives you graphs n stuff
 
@@ -117,11 +134,21 @@ uploads/                   ← where your meal pics go
 
 ```
 GET    /api/health           → is the server up  
-POST   /api/analyze-food     → send food image, get analysis  
-GET    /api/meals            → get meal history  
-DELETE /api/meals/:id        → delete a meal  
+POST   /api/analyze-food     → send food image, get analysis (requires auth)
+GET    /api/meals            → get meal history (requires auth)
+DELETE /api/meals/:id        → delete a meal (requires auth)
+GET    /api/user/profile     → get user profile (requires auth)
 GET    /uploads/:filename    → serve image files  
 ```
+
+## authentication
+
+The app now uses Clerk.dev for user authentication:
+
+- Users sign in with their phone number
+- Each user has their own private meal log
+- Authentication is handled via JWT tokens
+- User data is stored locally in SQLite
 
 ## if shit breaks
 
@@ -134,10 +161,17 @@ GET    /uploads/:filename    → serve image files
 ### api errors?
 
 - check if your key is right  
-- check if you’ve got quota  
+- check if you've got quota  
 - check your model access
+- make sure you're signed in
 
-### sqlite won’t write?
+### authentication issues?
+
+- check if your Clerk key is correct
+- verify Clerk application settings
+- check browser console for auth errors
+
+### sqlite won't write?
 
 - is `data/` folder writable?  
 - try restarting the backend
@@ -148,10 +182,10 @@ GET    /uploads/:filename    → serve image files
 - frontend hot reloads: `npm run client`  
 - open devtools and network tab if things feel weird  
 - logs go to console
+- check Clerk dashboard for auth logs
 
 ## todo (maybe)
 
-- auth / user profiles  
 - better food parsing / ai prompt tuning  
 - mobile app  
 - export to csv  
@@ -159,14 +193,17 @@ GET    /uploads/:filename    → serve image files
 - barcode scanner  
 - social / share meals  
 - sync with fitness stuff
+- email authentication option
+- user profile customization
 
 ## license
 
-MIT lol use it or don’t
+MIT lol use it or don't
 
 ## credit
 
 - openai for the image model  
+- clerk.dev for authentication
 - all the open source libs that do the real work  
 - you, for trying to eat better probably
 
@@ -174,4 +211,4 @@ MIT lol use it or don’t
 
 this is a personal project  
 not medical advice  
-don’t sue me if it thinks your tiramisu is beef stew
+don't sue me if it thinks your tiramisu is beef stew

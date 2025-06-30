@@ -23,36 +23,49 @@ function initDatabase() {
       
       console.log('📊 Connected to SQLite database');
       
-      // Create meals table if it doesn't exist
-      const createTableQuery = `
-        CREATE TABLE IF NOT EXISTS meals (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          image_path TEXT NOT NULL,
-          analysis TEXT NOT NULL,
-          note TEXT,
-          timestamp TEXT NOT NULL,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      // Create users table if it doesn't exist
+      const createUsersTableQuery = `
+        CREATE TABLE IF NOT EXISTS users (
+          id TEXT PRIMARY KEY,
+          phone_number TEXT UNIQUE NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
       `;
       
-      db.run(createTableQuery, (err) => {
+      db.run(createUsersTableQuery, (err) => {
         if (err) {
-          console.error('Error creating table:', err);
+          console.error('Error creating users table:', err);
           reject(err);
           return;
         }
         
-        console.log('✅ Meals table ready');
+        console.log('✅ Users table ready');
         
-        // Add note column if it doesn't exist (migration)
-        db.get("PRAGMA table_info(meals)", (err, rows) => {
+        // Create meals table if it doesn't exist
+        const createMealsTableQuery = `
+          CREATE TABLE IF NOT EXISTS meals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            image_path TEXT NOT NULL,
+            analysis TEXT NOT NULL,
+            note TEXT,
+            timestamp TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+          )
+        `;
+        
+        db.run(createMealsTableQuery, (err) => {
           if (err) {
-            console.error('Error checking table schema:', err);
+            console.error('Error creating meals table:', err);
             reject(err);
             return;
           }
           
-          // Check if note column exists
+          console.log('✅ Meals table ready');
+          
+          // Check if user_id column exists in meals table (migration)
           db.all("PRAGMA table_info(meals)", (err, columns) => {
             if (err) {
               console.error('Error getting table info:', err);
@@ -60,9 +73,37 @@ function initDatabase() {
               return;
             }
             
+            const hasUserIdColumn = columns.some(col => col.name === 'user_id');
             const hasNoteColumn = columns.some(col => col.name === 'note');
             
-            if (!hasNoteColumn) {
+            if (!hasUserIdColumn) {
+              console.log('🔄 Adding user_id column to meals table...');
+              db.run("ALTER TABLE meals ADD COLUMN user_id TEXT", (err) => {
+                if (err) {
+                  console.error('Error adding user_id column:', err);
+                  reject(err);
+                  return;
+                }
+                console.log('✅ User ID column added successfully');
+                
+                // Add note column if it doesn't exist
+                if (!hasNoteColumn) {
+                  console.log('🔄 Adding note column to meals table...');
+                  db.run("ALTER TABLE meals ADD COLUMN note TEXT", (err) => {
+                    if (err) {
+                      console.error('Error adding note column:', err);
+                      reject(err);
+                      return;
+                    }
+                    console.log('✅ Note column added successfully');
+                    resolve();
+                  });
+                } else {
+                  console.log('✅ Note column already exists');
+                  resolve();
+                }
+              });
+            } else if (!hasNoteColumn) {
               console.log('🔄 Adding note column to meals table...');
               db.run("ALTER TABLE meals ADD COLUMN note TEXT", (err) => {
                 if (err) {
@@ -74,7 +115,7 @@ function initDatabase() {
                 resolve();
               });
             } else {
-              console.log('✅ Note column already exists');
+              console.log('✅ All columns already exist');
               resolve();
             }
           });
@@ -84,17 +125,52 @@ function initDatabase() {
   });
 }
 
+function createOrUpdateUser(userId, phoneNumber) {
+  return new Promise((resolve, reject) => {
+    const query = `
+      INSERT OR REPLACE INTO users (id, phone_number, updated_at)
+      VALUES (?, ?, CURRENT_TIMESTAMP)
+    `;
+    
+    db.run(query, [userId, phoneNumber], function(err) {
+      if (err) {
+        console.error('Error creating/updating user:', err);
+        reject(err);
+        return;
+      }
+      
+      resolve(this.lastID);
+    });
+  });
+}
+
+function getUserById(userId) {
+  return new Promise((resolve, reject) => {
+    const query = 'SELECT * FROM users WHERE id = ?';
+    
+    db.get(query, [userId], (err, row) => {
+      if (err) {
+        console.error('Error fetching user:', err);
+        reject(err);
+        return;
+      }
+      
+      resolve(row);
+    });
+  });
+}
+
 function saveMeal(mealData) {
   return new Promise((resolve, reject) => {
-    const { imagePath, analysis, note, timestamp } = mealData;
+    const { userId, imagePath, analysis, note, timestamp } = mealData;
     const analysisJson = JSON.stringify(analysis);
     
     const query = `
-      INSERT INTO meals (image_path, analysis, note, timestamp)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO meals (user_id, image_path, analysis, note, timestamp)
+      VALUES (?, ?, ?, ?, ?)
     `;
     
-    db.run(query, [imagePath, analysisJson, note || null, timestamp], function(err) {
+    db.run(query, [userId, imagePath, analysisJson, note || null, timestamp], function(err) {
       if (err) {
         console.error('Error saving meal:', err);
         reject(err);
@@ -106,15 +182,16 @@ function saveMeal(mealData) {
   });
 }
 
-function getMeals() {
+function getMeals(userId) {
   return new Promise((resolve, reject) => {
     const query = `
       SELECT id, image_path, analysis, note, timestamp, created_at
       FROM meals
+      WHERE user_id = ?
       ORDER BY created_at DESC
     `;
     
-    db.all(query, [], (err, rows) => {
+    db.all(query, [userId], (err, rows) => {
       if (err) {
         console.error('Error fetching meals:', err);
         reject(err);
@@ -136,12 +213,12 @@ function getMeals() {
   });
 }
 
-function deleteMeal(mealId) {
+function deleteMeal(mealId, userId) {
   return new Promise((resolve, reject) => {
     // First get the image path to delete the file
-    const getQuery = 'SELECT image_path FROM meals WHERE id = ?';
+    const getQuery = 'SELECT image_path FROM meals WHERE id = ? AND user_id = ?';
     
-    db.get(getQuery, [mealId], (err, row) => {
+    db.get(getQuery, [mealId, userId], (err, row) => {
       if (err) {
         console.error('Error fetching meal for deletion:', err);
         reject(err);
@@ -149,7 +226,7 @@ function deleteMeal(mealId) {
       }
       
       if (!row) {
-        reject(new Error('Meal not found'));
+        reject(new Error('Meal not found or unauthorized'));
         return;
       }
       
@@ -160,8 +237,8 @@ function deleteMeal(mealId) {
       }
       
       // Delete from database
-      const deleteQuery = 'DELETE FROM meals WHERE id = ?';
-      db.run(deleteQuery, [mealId], (err) => {
+      const deleteQuery = 'DELETE FROM meals WHERE id = ? AND user_id = ?';
+      db.run(deleteQuery, [mealId, userId], (err) => {
         if (err) {
           console.error('Error deleting meal:', err);
           reject(err);
@@ -174,15 +251,15 @@ function deleteMeal(mealId) {
   });
 }
 
-function getDailyStats(date) {
+function getDailyStats(date, userId) {
   return new Promise((resolve, reject) => {
     const query = `
       SELECT analysis
       FROM meals
-      WHERE DATE(created_at) = DATE(?)
+      WHERE DATE(created_at) = DATE(?) AND user_id = ?
     `;
     
-    db.all(query, [date], (err, rows) => {
+    db.all(query, [date, userId], (err, rows) => {
       if (err) {
         console.error('Error fetching daily stats:', err);
         reject(err);
@@ -216,6 +293,8 @@ function getDailyStats(date) {
 
 module.exports = {
   initDatabase,
+  createOrUpdateUser,
+  getUserById,
   saveMeal,
   getMeals,
   deleteMeal,
