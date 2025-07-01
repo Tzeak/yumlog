@@ -1,13 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Trash2, BarChart3, History, Image } from 'lucide-react';
+import { Upload, Trash2, BarChart3, History, Image, LogOut, Settings, Key, Edit, Trash, User } from 'lucide-react';
 import axios from 'axios';
 import { format } from 'date-fns';
-import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { ClerkProvider, SignIn, useUser, useAuth, useClerk, useSignIn } from '@clerk/clerk-react';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
-function App() {
+// Create axios instance with auth interceptor
+const api = axios.create({
+  baseURL: API_BASE_URL,
+});
+
+function AppContent() {
+  const { user, isSignedIn, isLoaded } = useUser();
+  const { getToken } = useAuth();
+  const { signOut } = useClerk();
   const [activeTab, setActiveTab] = useState('upload');
+  const [showSettings, setShowSettings] = useState(false);
+  const [showSignInModal, setShowSignInModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -15,16 +26,54 @@ function App() {
   const [analysis, setAnalysis] = useState(null);
   const [note, setNote] = useState('');
 
+  // Add auth token to all requests
   useEffect(() => {
-    fetchMeals();
-  }, []);
+    const interceptor = api.interceptors.request.use(async (config) => {
+      if (isSignedIn && user) {
+        try {
+          console.log('🔐 Creating auth token for user:', user.id);
+          console.log('📱 User phone:', user?.primaryPhoneNumber?.phoneNumber);
+          console.log('📧 User email:', user?.emailAddresses?.[0]?.emailAddress);
+          
+          const token = await getToken();
+          if (token) {
+            // For Clerk, we'll use the user ID and phone number as our token
+            const phoneNumber = user?.primaryPhoneNumber?.phoneNumber || user?.emailAddresses?.[0]?.emailAddress || 'unknown';
+            const authToken = `${user.id}:${phoneNumber}`;
+            config.headers.Authorization = `Bearer ${authToken}`;
+            console.log('🔑 Auth token created:', authToken.substring(0, 20) + '...');
+          }
+        } catch (error) {
+          console.error('Error getting auth token:', error);
+        }
+      } else {
+        console.log('❌ Not signed in or no user data');
+      }
+      return config;
+    });
+
+    return () => {
+      api.interceptors.request.eject(interceptor);
+    };
+  }, [isSignedIn, user, getToken]);
+
+  useEffect(() => {
+    if (isSignedIn) {
+      fetchMeals();
+    }
+  }, [isSignedIn]);
 
   const fetchMeals = async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/meals`);
+      console.log('📋 Fetching meals...');
+      console.log('🔗 API URL:', API_BASE_URL);
+      const response = await api.get('/meals');
+      console.log('✅ Meals fetched successfully:', response.data);
       setMeals(response.data.meals || []);
     } catch (error) {
-      console.error('Error fetching meals:', error);
+      console.error('❌ Error fetching meals:', error);
+      console.error('📊 Error response:', error.response?.data);
+      console.error('🔢 Error status:', error.response?.status);
     }
   };
 
@@ -53,7 +102,7 @@ function App() {
         formData.append('note', note.trim());
       }
 
-      const response = await axios.post(`${API_BASE_URL}/analyze-food`, formData, {
+      const response = await api.post('/analyze-food', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -71,7 +120,7 @@ function App() {
 
   const deleteMeal = async (mealId) => {
     try {
-      await axios.delete(`${API_BASE_URL}/meals/${mealId}`);
+      await api.delete(`/meals/${mealId}`);
       await fetchMeals();
     } catch (error) {
       console.error('Error deleting meal:', error);
@@ -123,6 +172,171 @@ function App() {
       { name: 'Fat', value: stats.totalFat, color: '#f093fb' }
     ].filter(item => item.value > 0);
   };
+
+  // Show loading state while Clerk is loading
+  if (!isLoaded) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        fontSize: '18px',
+        color: '#667eea'
+      }}>
+        Loading...
+      </div>
+    );
+  }
+
+  // Show sign-in if not authenticated
+  if (!isSignedIn) {
+    return (
+      <div style={{ 
+        minHeight: '100vh',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: '20px'
+      }}>
+        <div style={{
+          background: 'white',
+          borderRadius: '16px',
+          padding: '40px',
+          boxShadow: '0 20px 40px rgba(0,0,0,0.1)',
+          maxWidth: '400px',
+          width: '100%',
+          textAlign: 'center'
+        }}>
+          <h1 style={{ 
+            marginBottom: '30px', 
+            color: '#333',
+            fontSize: '28px'
+          }}>
+            🍎 Yumlog
+          </h1>
+          <p style={{ 
+            marginBottom: '30px', 
+            color: '#666',
+            lineHeight: '1.6'
+          }}>
+            log your yums. quick stats.
+          </p>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <SignInWithPasskeyButton />
+            
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <div style={{ flex: 1, height: '1px', background: '#ddd' }}></div>
+              <span style={{ margin: '0 16px', color: '#666', fontSize: '14px' }}>or</span>
+              <div style={{ flex: 1, height: '1px', background: '#ddd' }}></div>
+            </div>
+            
+            <button 
+              onClick={() => setShowSignInModal(true)}
+              style={{
+                padding: '12px 24px',
+                background: '#667eea',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '16px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = '#5a6fd8';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = '#667eea';
+              }}
+            >
+              <User size={20} />
+              Sign in with Phone Number
+            </button>
+          </div>
+        </div>
+        
+        {/* Sign In Modal */}
+        {showSignInModal && (
+          <div 
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0, 0, 0, 0.5)',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              zIndex: 1000,
+              padding: '20px'
+            }}
+            onClick={(e) => {
+              // Close modal when clicking outside
+              if (e.target === e.currentTarget) {
+                setShowSignInModal(false);
+              }
+            }}
+            onKeyDown={(e) => {
+              // Close modal when pressing Escape
+              if (e.key === 'Escape') {
+                setShowSignInModal(false);
+              }
+            }}
+            tabIndex={0}
+          >
+            <div style={{ position: 'relative' }}>
+              <button 
+                onClick={() => setShowSignInModal(false)}
+                style={{
+                  position: 'absolute',
+                  top: '-20px',
+                  right: '-20px',
+                  background: 'rgba(255, 255, 255, 0.9)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '40px',
+                  height: '40px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  fontSize: '20px',
+                  color: '#666',
+                  fontWeight: 'bold',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                  zIndex: 1001,
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 1)';
+                  e.currentTarget.style.transform = 'scale(1.1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.9)';
+                  e.currentTarget.style.transform = 'scale(1)';
+                }}
+              >
+                ×
+              </button>
+              <SignIn />
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   const renderUploadTab = () => (
     <div className="card">
@@ -198,33 +412,31 @@ function App() {
             style={{ 
               maxWidth: '100%', 
               maxHeight: '400px',
-              borderRadius: '12px', 
+              borderRadius: '12px',
               marginBottom: '20px',
               boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
             }} 
           />
           
-          <div style={{ marginBottom: '20px', width: '100%', maxWidth: '400px', margin: '0 auto 20px' }}>
-            <label htmlFor="note-input" style={{ 
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ 
               display: 'block', 
               marginBottom: '8px', 
-              fontWeight: '500', 
-              color: '#333',
-              textAlign: 'left'
+              fontWeight: 'bold',
+              color: '#333'
             }}>
-              📝 Add a note (optional):
+              Optional Note:
             </label>
             <textarea
-              id="note-input"
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="Describe your meal, ingredients, or any special notes..."
+              placeholder="Add a note about your meal..."
               style={{
                 width: '100%',
                 padding: '12px',
-                border: '1px solid #ddd',
+                border: '2px solid #e9ecef',
                 borderRadius: '8px',
-                fontSize: '14px',
+                fontSize: '16px',
                 fontFamily: 'inherit',
                 resize: 'vertical',
                 minHeight: '80px'
@@ -234,97 +446,76 @@ function App() {
           
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
             <button 
-              className="btn" 
+              className="btn btn-primary" 
               onClick={analyzeFood}
               disabled={isAnalyzing}
+              style={{ minWidth: '120px' }}
             >
-              {isAnalyzing ? (
-                <>
-                  <div className="spinner"></div>
-                  Analyzing...
-                </>
-              ) : (
-                <>
-                  <Upload size={20} />
-                  Analyze Food
-                </>
-              )}
+              {isAnalyzing ? 'Analyzing...' : 'Analyze Food'}
             </button>
+            
             <button 
               className="btn btn-secondary" 
               onClick={resetUpload}
+              disabled={isAnalyzing}
             >
-              <Trash2 size={20} />
-              Choose Different Image
+              Reset
             </button>
           </div>
         </div>
       )}
 
       {analysis && (
-        <div style={{ marginTop: '30px' }}>
-          <h3 style={{ marginBottom: '20px', textAlign: 'center' }}>
-            🍽️ Analysis Results
-          </h3>
+        <div style={{ 
+          marginTop: '30px',
+          padding: '20px',
+          background: '#f8f9fa',
+          borderRadius: '12px',
+          border: '2px solid #667eea'
+        }}>
+          <h3 style={{ marginBottom: '16px', color: '#333' }}>🍽️ Analysis Results</h3>
           
-          <div className="nutrition-grid">
-            <div className="nutrition-item">
-              <div className="nutrition-value">{analysis.total_calories}</div>
-              <div className="nutrition-label">Calories</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px', marginBottom: '20px' }}>
+            <div style={{ textAlign: 'center', padding: '12px', background: 'white', borderRadius: '8px' }}>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#667eea' }}>
+                {analysis.total_calories || 0}
+              </div>
+              <div style={{ fontSize: '14px', color: '#666' }}>Calories</div>
             </div>
-            <div className="nutrition-item">
-              <div className="nutrition-value">{analysis.total_protein}g</div>
-              <div className="nutrition-label">Protein</div>
+            
+            <div style={{ textAlign: 'center', padding: '12px', background: 'white', borderRadius: '8px' }}>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#667eea' }}>
+                {analysis.total_protein || 0}g
+              </div>
+              <div style={{ fontSize: '14px', color: '#666' }}>Protein</div>
             </div>
-            <div className="nutrition-item">
-              <div className="nutrition-value">{analysis.total_carbs}g</div>
-              <div className="nutrition-label">Carbs</div>
+            
+            <div style={{ textAlign: 'center', padding: '12px', background: 'white', borderRadius: '8px' }}>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#667eea' }}>
+                {analysis.total_carbs || 0}g
+              </div>
+              <div style={{ fontSize: '14px', color: '#666' }}>Carbs</div>
             </div>
-            <div className="nutrition-item">
-              <div className="nutrition-value">{analysis.total_fat}g</div>
-              <div className="nutrition-label">Fat</div>
-            </div>
-            <div className="nutrition-item">
-              <div className="nutrition-value">{analysis.total_fiber}g</div>
-              <div className="nutrition-label">Fiber</div>
-            </div>
-            <div className="nutrition-item">
-              <div className="nutrition-value">{analysis.total_sugar}g</div>
-              <div className="nutrition-label">Sugar</div>
+            
+            <div style={{ textAlign: 'center', padding: '12px', background: 'white', borderRadius: '8px' }}>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#667eea' }}>
+                {analysis.total_fat || 0}g
+              </div>
+              <div style={{ fontSize: '14px', color: '#666' }}>Fat</div>
             </div>
           </div>
-
-          {analysis.foods && analysis.foods.length > 0 && (
-            <div style={{ marginTop: '20px' }}>
-              <h4>Detected Foods:</h4>
-              <ul style={{ listStyle: 'none', padding: 0 }}>
-                {analysis.foods.map((food, index) => (
-                  <li key={index} style={{ 
-                    padding: '8px 0', 
-                    borderBottom: '1px solid #eee',
-                    display: 'flex',
-                    justifyContent: 'space-between'
-                  }}>
-                    <span>{food.name} ({food.estimated_quantity})</span>
-                    <span style={{ color: '#667eea', fontWeight: 'bold' }}>
-                      {food.calories} cal
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
+          
           {analysis.notes && (
             <div style={{ 
-              marginTop: '20px', 
               padding: '16px', 
-              background: '#f8f9fa', 
+              background: 'white', 
               borderRadius: '8px',
-              fontSize: '14px',
-              color: '#6c757d'
+              borderLeft: '4px solid #667eea'
             }}>
-              <strong>Notes:</strong> {analysis.notes}
+              <h4 style={{ marginBottom: '8px', color: '#333' }}>AI Notes:</h4>
+              <p style={{ color: '#666', lineHeight: '1.6', margin: 0 }}>
+                {analysis.notes}
+              </p>
             </div>
           )}
         </div>
@@ -478,8 +669,46 @@ function App() {
   return (
     <div className="container">
       <div className="header">
-        <h1>🍽️ Yumlog</h1>
-        <p>Upload a photo of your food and let AI analyze your nutrition</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+          <div>
+            <h1>🍽️ Yumlog</h1>
+            <p>Upload a photo of your food and let AI analyze your nutrition</p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div 
+              style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '8px',
+                padding: '8px 12px',
+                background: '#f8f9fa',
+                borderRadius: '8px',
+                fontSize: '14px',
+                color: '#666',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onClick={() => setShowSettings(!showSettings)}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = '#e9ecef';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = '#f8f9fa';
+              }}
+            >
+              <Settings size={16} />
+              <span>{user?.primaryPhoneNumber?.phoneNumber || 'User'}</span>
+            </div>
+            <button 
+              className="btn btn-secondary"
+              onClick={() => signOut()}
+              style={{ padding: '8px 12px' }}
+            >
+              <LogOut size={16} />
+              Sign Out
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="tabs">
@@ -509,7 +738,471 @@ function App() {
       {activeTab === 'upload' && renderUploadTab()}
       {activeTab === 'history' && renderHistoryTab()}
       {activeTab === 'analytics' && renderAnalyticsTab()}
+      
+      {/* Settings Modal */}
+      {showSettings && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '16px',
+            padding: '30px',
+            maxWidth: '500px',
+            width: '90%',
+            maxHeight: '80vh',
+            overflow: 'auto',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '20px'
+            }}>
+              <h2 style={{ margin: 0, color: '#333' }}>⚙️ Settings</h2>
+              <button 
+                onClick={() => setShowSettings(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  color: '#666',
+                  padding: '4px'
+                }}
+              >
+                ×
+              </button>
+            </div>
+            
+            <div style={{ marginBottom: '30px' }}>
+              <h3 style={{ marginBottom: '16px', color: '#333' }}>🔐 Passkey Management</h3>
+              <p style={{ marginBottom: '20px', color: '#666' }}>
+                Passkeys provide secure, passwordless authentication using your device's biometrics or PIN.
+              </p>
+              
+              <div style={{ marginBottom: '20px' }}>
+                <CreatePasskeyButton />
+              </div>
+              
+              <div style={{ marginBottom: '20px' }}>
+                <SignInWithPasskeyButton />
+              </div>
+            </div>
+            
+            <div style={{ borderTop: '1px solid #eee', paddingTop: '20px' }}>
+              <PasskeyList />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+// Passkey Management Components
+function CreatePasskeyButton() {
+  const { user } = useUser();
+
+  const createClerkPasskey = async () => {
+    if (!user) return;
+
+    try {
+      await user?.createPasskey();
+    } catch (err) {
+      console.error('Error:', JSON.stringify(err, null, 2));
+    }
+  };
+
+  return (
+    <button 
+      className="btn btn-primary" 
+      onClick={createClerkPasskey}
+      style={{ marginBottom: '16px' }}
+    >
+      <Key size={16} style={{ marginRight: '8px' }} />
+      Create a passkey
+    </button>
+  );
+}
+
+function SignInWithPasskeyButton() {
+  const { signIn } = useSignIn();
+  const { isSignedIn } = useUser();
+  const { setActive } = useClerk();
+
+  const signInWithPasskey = async () => {
+    // Don't try to sign in if already signed in
+    if (isSignedIn) {
+      console.log('User is already signed in');
+      return;
+    }
+
+    try {
+      const signInAttempt = await signIn?.authenticateWithPasskey({
+        flow: 'discoverable',
+      });
+
+      if (signInAttempt?.status === 'complete') {
+        console.log('Passkey authentication successful');
+        // Properly activate the session
+        await setActive({ session: signInAttempt.createdSessionId });
+      } else {
+        console.log('Sign-in attempt status:', signInAttempt?.status);
+      }
+    } catch (err) {
+      // Handle specific error cases
+      if (err.errors && err.errors.some(e => e.code === 'session_exists')) {
+        console.log('User is already signed in - this is expected after successful authentication');
+        // Try to refresh the session
+        try {
+          await setActive();
+        } catch (refreshError) {
+          console.error('Error refreshing session:', refreshError);
+        }
+      } else {
+        console.error('Passkey authentication error:', JSON.stringify(err, null, 2));
+      }
+    }
+  };
+
+  // Don't show the button if user is already signed in
+  if (isSignedIn) {
+    return null;
+  }
+
+  return (
+    <button 
+      className="btn btn-primary" 
+      onClick={signInWithPasskey}
+      style={{ marginBottom: '16px' }}
+    >
+      <Key size={16} style={{ marginRight: '8px' }} />
+      Sign in with a passkey
+    </button>
+  );
+}
+
+function PasskeyList() {
+  const { user } = useUser();
+  const { passkeys } = user || {};
+  const [editingId, setEditingId] = useState(null);
+  const [newName, setNewName] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const startEditing = (passkey) => {
+    setEditingId(passkey.id);
+    setNewName(passkey.name || '');
+    setSuccess('');
+  };
+
+  const cancelEditing = () => {
+    setEditingId(null);
+    setNewName('');
+    setSuccess('');
+  };
+
+  const saveEdit = async () => {
+    try {
+      const passkeyToUpdate = passkeys?.find((pk) => pk.id === editingId);
+      await passkeyToUpdate?.update({ name: newName });
+      setSuccess('Passkey renamed successfully!');
+      setEditingId(null);
+      setNewName('');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      console.error('Error:', JSON.stringify(err, null, 2));
+      setSuccess('Error renaming passkey');
+      setTimeout(() => setSuccess(''), 3000);
+    }
+  };
+
+  const deletePasskey = async (passkeyId) => {
+    try {
+      const passkeyToDelete = passkeys?.find((pk) => pk.id === passkeyId);
+      await passkeyToDelete?.delete();
+      setSuccess('Passkey deleted successfully!');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      console.error('Error:', JSON.stringify(err, null, 2));
+      setSuccess('Error deleting passkey');
+      setTimeout(() => setSuccess(''), 3000);
+    }
+  };
+
+  if (!passkeys || passkeys.length === 0) {
+    return (
+      <div style={{ 
+        textAlign: 'center', 
+        padding: '20px', 
+        color: '#666',
+        background: '#f8f9fa',
+        borderRadius: '8px'
+      }}>
+        <Key size={32} style={{ marginBottom: '8px', opacity: 0.5 }} />
+        <p>No passkeys set up yet. Create one to get started!</p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: '20px' }}>
+      <h4 style={{ marginBottom: '16px', color: '#333' }}>Your Passkeys</h4>
+      
+      {success && (
+        <div style={{
+          padding: '8px 12px',
+          marginBottom: '16px',
+          borderRadius: '6px',
+          background: success.includes('Error') ? '#f8d7da' : '#d4edda',
+          color: success.includes('Error') ? '#721c24' : '#155724',
+          fontSize: '14px'
+        }}>
+          {success}
+        </div>
+      )}
+      
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {passkeys?.map((pk) => (
+          <div 
+            key={pk.id} 
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '16px',
+              background: '#f8f9fa',
+              borderRadius: '8px',
+              border: '1px solid #e9ecef'
+            }}
+          >
+            <div style={{ flex: 1 }}>
+              {editingId === pk.id ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    style={{
+                      padding: '6px 8px',
+                      borderRadius: '4px',
+                      border: '1px solid #ddd',
+                      fontSize: '14px',
+                      flex: 1
+                    }}
+                    placeholder="Enter passkey name"
+                  />
+                  <button 
+                    onClick={saveEdit}
+                    style={{
+                      padding: '6px 8px',
+                      background: '#28a745',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '12px'
+                    }}
+                  >
+                    Save
+                  </button>
+                  <button 
+                    onClick={cancelEditing}
+                    style={{
+                      padding: '6px 8px',
+                      background: '#6c757d',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '12px'
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ 
+                    fontSize: '16px', 
+                    fontWeight: '500', 
+                    color: '#333',
+                    marginBottom: '4px'
+                  }}>
+                    {pk.name || 'Unnamed Passkey'}
+                  </div>
+                  <div style={{ 
+                    fontSize: '12px', 
+                    color: '#6c757d' 
+                  }}>
+                    ID: {pk.id}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {editingId !== pk.id && (
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  onClick={() => startEditing(pk)}
+                  style={{
+                    padding: '6px 8px',
+                    background: '#007bff',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontSize: '12px'
+                  }}
+                >
+                  <Edit size={12} />
+                  Edit
+                </button>
+                <button 
+                  onClick={() => deletePasskey(pk.id)}
+                  style={{
+                    padding: '6px 8px',
+                    background: '#dc3545',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontSize: '12px'
+                  }}
+                >
+                  <Trash size={12} />
+                  Delete
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Main App component with ClerkProvider
+function App() {
+  const publishableKey = process.env.REACT_APP_CLERK_PUBLISHABLE_KEY;
+  
+  // Add detailed logging for debugging
+  console.log('🔍 Clerk Environment Debug Info:');
+  console.log('- REACT_APP_CLERK_PUBLISHABLE_KEY:', publishableKey ? `${publishableKey.substring(0, 20)}...` : 'NOT SET');
+  console.log('- All REACT_APP_ env vars:', Object.keys(process.env).filter(key => key.startsWith('REACT_APP_')));
+  console.log('- Node environment:', process.env.NODE_ENV);
+  console.log('- Current URL:', window.location.href);
+  
+  if (!publishableKey) {
+    console.error('❌ Clerk publishable key is missing!');
+    console.error('Environment variables available:', Object.keys(process.env));
+    
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        fontSize: '18px',
+        color: '#667eea',
+        flexDirection: 'column',
+        padding: '20px',
+        textAlign: 'center'
+      }}>
+        <h2 style={{ marginBottom: '20px' }}>🔑 Configuration Error</h2>
+        <p style={{ marginBottom: '20px' }}>
+          Clerk publishable key not found. Please check your environment variables.
+        </p>
+        <div style={{ 
+          background: '#f8f9fa', 
+          padding: '20px', 
+          borderRadius: '8px',
+          fontSize: '14px',
+          textAlign: 'left',
+          maxWidth: '600px'
+        }}>
+          <h4>Debug Information:</h4>
+          <ul style={{ margin: '10px 0', paddingLeft: '20px' }}>
+            <li>Environment: {process.env.NODE_ENV}</li>
+            <li>URL: {window.location.href}</li>
+            <li>REACT_APP_ variables: {Object.keys(process.env).filter(key => key.startsWith('REACT_APP_')).join(', ') || 'None found'}</li>
+          </ul>
+          <h4>How to fix:</h4>
+          <ol style={{ margin: '10px 0', paddingLeft: '20px' }}>
+            <li>Check if <code>.env</code> file exists in the client directory</li>
+            <li>Verify <code>REACT_APP_CLERK_PUBLISHABLE_KEY</code> is set correctly</li>
+            <li>Restart the development server after changing environment variables</li>
+            <li>For production, ensure the environment variable is set in your hosting platform</li>
+          </ol>
+        </div>
+      </div>
+    );
+  }
+
+  // Validate the key format
+  if (!publishableKey.startsWith('pk_')) {
+    console.error('❌ Invalid Clerk publishable key format!');
+    console.error('Key should start with "pk_test_" or "pk_live_"');
+    
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        fontSize: '18px',
+        color: '#dc3545',
+        flexDirection: 'column',
+        padding: '20px',
+        textAlign: 'center'
+      }}>
+        <h2 style={{ marginBottom: '20px' }}>🔑 Invalid Key Format</h2>
+        <p style={{ marginBottom: '20px' }}>
+          Clerk publishable key has invalid format. Key should start with "pk_test_" or "pk_live_".
+        </p>
+        <div style={{ 
+          background: '#f8d7da', 
+          padding: '20px', 
+          borderRadius: '8px',
+          fontSize: '14px',
+          textAlign: 'left',
+          maxWidth: '600px'
+        }}>
+          <h4>Current key format:</h4>
+          <code style={{ background: '#fff', padding: '4px 8px', borderRadius: '4px' }}>
+            {publishableKey.substring(0, 20)}...
+          </code>
+          <h4 style={{ marginTop: '16px' }}>Expected format:</h4>
+          <code style={{ background: '#fff', padding: '4px 8px', borderRadius: '4px' }}>
+            pk_test_... or pk_live_...
+          </code>
+        </div>
+      </div>
+    );
+  }
+
+  console.log('✅ Clerk publishable key found and validated');
+
+  return (
+    <ClerkProvider publishableKey={publishableKey}>
+      <AppContent />
+    </ClerkProvider>
   );
 }
 
