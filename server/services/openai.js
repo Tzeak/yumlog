@@ -6,7 +6,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-async function analyzeFoodImage(imagePath) {
+async function analyzeFoodImage(imagePath, ingredientNotes = null) {
   try {
     console.log('📖 Reading image file:', imagePath);
     // Read the image file
@@ -15,6 +15,16 @@ async function analyzeFoodImage(imagePath) {
     console.log('📊 Image size:', imageBuffer.length, 'bytes, Base64 length:', base64Image.length);
 
     console.log('🤖 Making OpenAI API request with structured output...');
+    
+    let userPrompt = "Analyze this food image and provide detailed nutritional information. Be as accurate as possible with portion sizes and nutritional values. If you're unsure about specific values, provide reasonable estimates and mark confidence as 'low'.";
+    
+    if (ingredientNotes && ingredientNotes.trim()) {
+      userPrompt = `Please reanalyze this food image with the following additional information: ${ingredientNotes.trim()}
+
+Consider this information when identifying ingredients and estimating nutritional values. If the user mentions specific ingredients, make sure to include them in your analysis. If they mention corrections to previous analysis, incorporate those corrections.
+
+Provide detailed nutritional information. Be as accurate as possible with portion sizes and nutritional values. If you're unsure about specific values, provide reasonable estimates and mark confidence as 'low'.`;
+    }
     
     const response = await openai.responses.create({
       model: "gpt-4o-2024-08-06",
@@ -28,7 +38,7 @@ async function analyzeFoodImage(imagePath) {
           content: [
             {
               type: "input_text",
-              text: "Analyze this food image and provide detailed nutritional information. Be as accurate as possible with portion sizes and nutritional values. If you're unsure about specific values, provide reasonable estimates and mark confidence as 'low'."
+              text: userPrompt
             },
             {
               type: "input_image",

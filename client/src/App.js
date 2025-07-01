@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Trash2, BarChart3, History, Image, LogOut, Settings, Key, Edit, Trash, User } from 'lucide-react';
+import { Upload, Trash2, BarChart3, History, Image, LogOut, Settings, Key, Edit, Trash, User, Plus, Minus } from 'lucide-react';
 import axios from 'axios';
 import { format } from 'date-fns';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
@@ -25,29 +25,45 @@ function AppContent() {
   const [meals, setMeals] = useState([]);
   const [analysis, setAnalysis] = useState(null);
   const [note, setNote] = useState('');
+  
+  // New state for editable ingredients
+  const [editableIngredients, setEditableIngredients] = useState([]);
+  const [newIngredient, setNewIngredient] = useState({ name: '', quantity: '', calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 });
+  
+  // State for expanded meals in history
+  const [expandedMeals, setExpandedMeals] = useState(new Set());
+  
+  // New state for ingredient editing
+  const [ingredientEditText, setIngredientEditText] = useState('');
+  const [isReanalyzing, setIsReanalyzing] = useState(false);
+  const [hasUnanalyzedChanges, setHasUnanalyzedChanges] = useState(false);
+  
+  // State for success message
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const [lastSavedMeal, setLastSavedMeal] = useState(null);
 
   // Add auth token to all requests
   useEffect(() => {
+    // Only create interceptor if user is signed in
+    if (!isSignedIn || !user) {
+      return;
+    }
+
     const interceptor = api.interceptors.request.use(async (config) => {
-      if (isSignedIn && user) {
-        try {
-          console.log('🔐 Creating auth token for user:', user.id);
-          console.log('📱 User phone:', user?.primaryPhoneNumber?.phoneNumber);
-          console.log('📧 User email:', user?.emailAddresses?.[0]?.emailAddress);
-          
-          const token = await getToken();
-          if (token) {
-            // For Clerk, we'll use the user ID and phone number as our token
-            const phoneNumber = user?.primaryPhoneNumber?.phoneNumber || user?.emailAddresses?.[0]?.emailAddress || 'unknown';
-            const authToken = `${user.id}:${phoneNumber}`;
-            config.headers.Authorization = `Bearer ${authToken}`;
-            console.log('🔑 Auth token created:', authToken.substring(0, 20) + '...');
-          }
-        } catch (error) {
-          console.error('Error getting auth token:', error);
+      try {
+        console.log('🔐 Creating auth token for user:', user.id);
+        
+        // Get token without including getToken in dependencies
+        const token = await getToken();
+        if (token) {
+          // For Clerk, we'll use the user ID and phone number as our token
+          const phoneNumber = user?.primaryPhoneNumber?.phoneNumber || user?.emailAddresses?.[0]?.emailAddress || 'unknown';
+          const authToken = `${user.id}:${phoneNumber}`;
+          config.headers.Authorization = `Bearer ${authToken}`;
+          console.log('🔑 Auth token created:', authToken.substring(0, 20) + '...');
         }
-      } else {
-        console.log('❌ Not signed in or no user data');
+      } catch (error) {
+        console.error('Error getting auth token:', error);
       }
       return config;
     });
@@ -55,7 +71,15 @@ function AppContent() {
     return () => {
       api.interceptors.request.eject(interceptor);
     };
-  }, [isSignedIn, user, getToken]);
+  }, [isSignedIn, user?.id]); // Only depend on isSignedIn and user ID
+
+  // Clean up interceptor when user signs out
+  useEffect(() => {
+    if (!isSignedIn) {
+      // Clear any existing interceptors
+      api.interceptors.request.clear();
+    }
+  }, [isSignedIn]);
 
   useEffect(() => {
     if (isSignedIn) {
@@ -102,14 +126,18 @@ function AppContent() {
         formData.append('note', note.trim());
       }
 
-      const response = await api.post('/analyze-food', formData, {
+      const { data } = await api.post('/analyze-food-only', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
       });
 
-      setAnalysis(response.data.analysis);
-      await fetchMeals(); // Refresh meals list
+      console.log('🔍 Analysis received:', data.analysis);
+      console.log('🍽️ Foods array:', data.analysis.foods);
+      
+      setAnalysis(data.analysis);
+      initializeEditableIngredients(data.analysis);
+      // Don't fetch meals here since we haven't saved yet
     } catch (error) {
       console.error('Error analyzing food:', error);
       alert('Failed to analyze food image. Please try again.');
@@ -132,10 +160,170 @@ function AppContent() {
     setImagePreview(null);
     setAnalysis(null);
     setNote('');
+    setEditableIngredients([]);
+    setIngredientEditText('');
+    setIsReanalyzing(false);
+    setHasUnanalyzedChanges(false);
     // Reset the file input
     const fileInput = document.getElementById('image-upload');
     if (fileInput) {
       fileInput.value = '';
+    }
+  };
+
+  // New functions for ingredient management
+  const initializeEditableIngredients = (analysis) => {
+    console.log('🔧 Initializing editable ingredients from analysis:', analysis);
+    if (analysis.foods && Array.isArray(analysis.foods)) {
+      const ingredients = analysis.foods.map(food => {
+        const ingredient = {
+          ...food,
+          id: Math.random().toString(36).substr(2, 9), // Generate unique ID
+          originalQuantity: food.estimated_quantity,
+          originalCalories: food.calories || 0,
+          originalProtein: food.protein || 0,
+          originalCarbs: food.carbs || 0,
+          originalFat: food.fat || 0,
+          originalFiber: food.fiber || 0,
+          originalSugar: food.sugar || 0,
+          servingMultiplier: 1
+        };
+        console.log('🍎 Processed ingredient:', ingredient);
+        return ingredient;
+      });
+      console.log('📋 Setting editable ingredients:', ingredients);
+      setEditableIngredients(ingredients);
+    } else {
+      console.log('❌ No foods array found in analysis or it\'s not an array');
+    }
+  };
+
+  const updateIngredientServing = (ingredientId, multiplier) => {
+    setEditableIngredients(prev => prev.map(ingredient => {
+      if (ingredient.id === ingredientId) {
+        const newMultiplier = Math.max(0.1, multiplier); // Minimum 0.1x serving
+        return {
+          ...ingredient,
+          servingMultiplier: newMultiplier,
+          calories: Math.round(ingredient.originalCalories * newMultiplier),
+          protein: Math.round(ingredient.originalProtein * newMultiplier * 10) / 10,
+          carbs: Math.round(ingredient.originalCarbs * newMultiplier * 10) / 10,
+          fat: Math.round(ingredient.originalFat * newMultiplier * 10) / 10,
+          fiber: Math.round(ingredient.originalFiber * newMultiplier * 10) / 10,
+          sugar: Math.round(ingredient.originalSugar * newMultiplier * 10) / 10
+        };
+      }
+      return ingredient;
+    }));
+    // Serving size adjustments are calculated locally and don't require reanalysis
+  };
+
+  const handleIngredientEdit = (text) => {
+    setIngredientEditText(text);
+    setHasUnanalyzedChanges(true);
+  };
+
+  const removeIngredient = (ingredientId) => {
+    setEditableIngredients(prev => prev.filter(ingredient => ingredient.id !== ingredientId));
+    // Removing ingredients is a local operation and doesn't require reanalysis
+  };
+
+  const getUpdatedTotals = () => {
+    return editableIngredients.reduce((totals, ingredient) => ({
+      calories: totals.calories + (ingredient.calories || 0),
+      protein: totals.protein + (ingredient.protein || 0),
+      carbs: totals.carbs + (ingredient.carbs || 0),
+      fat: totals.fat + (ingredient.fat || 0),
+      fiber: totals.fiber + (ingredient.fiber || 0),
+      sugar: totals.sugar + (ingredient.sugar || 0)
+    }), { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 });
+  };
+
+  const formatServingDisplay = (originalQuantity, servingMultiplier) => {
+    // Handle undefined/null values for older meals
+    if (!originalQuantity) {
+      return servingMultiplier === 1 ? 'Unknown quantity' : `Unknown quantity × ${servingMultiplier.toFixed(1)}`;
+    }
+    
+    if (servingMultiplier === 1) {
+      return originalQuantity;
+    }
+    
+    // Try to extract number and unit from the quantity
+    const match = originalQuantity.match(/^([\d.]+)\s*(.+)$/);
+    if (match) {
+      const [, numberStr, unit] = match;
+      const number = parseFloat(numberStr);
+      if (!isNaN(number)) {
+        const result = number * servingMultiplier;
+        return `${originalQuantity} × ${servingMultiplier.toFixed(1)} = ${result.toFixed(1)} ${unit}`;
+      }
+    }
+    
+    // Fallback for complex quantities
+    return `${originalQuantity} × ${servingMultiplier.toFixed(1)}`;
+  };
+
+  const saveMealWithModifications = async () => {
+    if (!analysis || editableIngredients.length === 0) return;
+
+    try {
+      const totals = getUpdatedTotals();
+      
+      // Create updated analysis with modified ingredients
+      const updatedAnalysis = {
+        ...analysis,
+        foods: editableIngredients,
+        total_calories: totals.calories,
+        total_protein: totals.protein,
+        total_carbs: totals.carbs,
+        total_fat: totals.fat,
+        total_fiber: totals.fiber,
+        total_sugar: totals.sugar
+      };
+
+      const formData = new FormData();
+      formData.append('image', selectedImage);
+      formData.append('analysis', JSON.stringify(updatedAnalysis));
+      if (note.trim()) {
+        formData.append('note', note.trim());
+      }
+
+      const response = await api.post('/analyze-food', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      // Store the saved meal details for success message
+      const savedMeal = {
+        id: response.data.mealId,
+        analysis: updatedAnalysis,
+        note: note.trim(),
+        imagePath: selectedImage.name,
+        createdAt: new Date().toISOString()
+      };
+      
+      // Update the analysis state with the saved version
+      setAnalysis(updatedAnalysis);
+      await fetchMeals(); // Refresh meals list
+      
+      // Clear the upload section
+      resetUpload();
+      
+      // Show success message
+      setLastSavedMeal(savedMeal);
+      setShowSuccessMessage(true);
+      
+      // Auto-hide success message after 5 seconds
+      setTimeout(() => {
+        setShowSuccessMessage(false);
+        setLastSavedMeal(null);
+      }, 5000);
+      
+    } catch (error) {
+      console.error('Error saving meal with modifications:', error);
+      alert('Failed to save meal modifications. Please try again.');
     }
   };
 
@@ -171,6 +359,55 @@ function AppContent() {
       { name: 'Carbs', value: stats.totalCarbs, color: '#764ba2' },
       { name: 'Fat', value: stats.totalFat, color: '#f093fb' }
     ].filter(item => item.value > 0);
+  };
+
+  const reanalyzeWithIngredients = async () => {
+    if (!ingredientEditText.trim() || !selectedImage) return;
+
+    setIsReanalyzing(true);
+    try {
+      // Build comprehensive ingredient notes including serving adjustments
+      let comprehensiveNotes = ingredientEditText.trim();
+      
+      // Add serving size adjustments to the notes only if there are text notes
+      const servingAdjustments = editableIngredients
+        .filter(ingredient => ingredient.servingMultiplier !== 1)
+        .map(ingredient => {
+          const originalQty = ingredient.originalQuantity;
+          const multiplier = ingredient.servingMultiplier;
+          const adjustedQty = formatServingDisplay(originalQty, multiplier);
+          return `- ${ingredient.name}: adjusted from ${originalQty} to ${adjustedQty} (${multiplier.toFixed(1)}x serving)`;
+        });
+      
+      if (servingAdjustments.length > 0) {
+        comprehensiveNotes += '\n\nServing size adjustments:\n' + servingAdjustments.join('\n');
+      }
+
+      const formData = new FormData();
+      formData.append('image', selectedImage);
+      formData.append('ingredient_notes', comprehensiveNotes);
+      if (note.trim()) {
+        formData.append('note', note.trim());
+      }
+
+      const { data } = await api.post('/analyze-food-only', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      console.log('🔍 Reanalysis received:', data.analysis);
+      setAnalysis(data.analysis);
+      initializeEditableIngredients(data.analysis);
+      setIngredientEditText('');
+      setHasUnanalyzedChanges(false);
+      // Don't fetch meals here since we haven't saved yet
+    } catch (error) {
+      console.error('Error reanalyzing food:', error);
+      alert('Failed to reanalyze food image. Please try again.');
+    } finally {
+      setIsReanalyzing(false);
+    }
   };
 
   // Show loading state while Clerk is loading
@@ -465,6 +702,69 @@ function AppContent() {
         </div>
       )}
 
+      {/* Success Message */}
+      {showSuccessMessage && lastSavedMeal && (
+        <div style={{ 
+          marginTop: '20px',
+          padding: '20px',
+          background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+          borderRadius: '12px',
+          color: 'white',
+          textAlign: 'center',
+          boxShadow: '0 4px 12px rgba(40, 167, 69, 0.3)'
+        }}>
+          <div style={{ fontSize: '24px', marginBottom: '8px' }}>✅</div>
+          <h3 style={{ margin: '0 0 12px 0', fontSize: '20px' }}>Meal Saved Successfully!</h3>
+          <div style={{ 
+            background: 'rgba(255, 255, 255, 0.2)', 
+            borderRadius: '8px', 
+            padding: '16px',
+            marginBottom: '16px'
+          }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '12px' }}>
+              <div>
+                <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{lastSavedMeal.analysis.total_calories}</div>
+                <div style={{ fontSize: '12px', opacity: 0.9 }}>Calories</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{lastSavedMeal.analysis.total_protein}g</div>
+                <div style={{ fontSize: '12px', opacity: 0.9 }}>Protein</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{lastSavedMeal.analysis.total_carbs}g</div>
+                <div style={{ fontSize: '12px', opacity: 0.9 }}>Carbs</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{lastSavedMeal.analysis.total_fat}g</div>
+                <div style={{ fontSize: '12px', opacity: 0.9 }}>Fat</div>
+              </div>
+            </div>
+            {lastSavedMeal.note && (
+              <div style={{ marginTop: '12px', fontSize: '14px', opacity: 0.9 }}>
+                <strong>Note:</strong> {lastSavedMeal.note}
+              </div>
+            )}
+          </div>
+          <button 
+            onClick={() => {
+              setShowSuccessMessage(false);
+              setLastSavedMeal(null);
+            }}
+            style={{
+              background: 'rgba(255, 255, 255, 0.2)',
+              color: 'white',
+              border: '1px solid rgba(255, 255, 255, 0.3)',
+              borderRadius: '6px',
+              padding: '8px 16px',
+              cursor: 'pointer',
+              fontSize: '14px'
+            }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {analysis && (
         <div style={{ 
           marginTop: '30px',
@@ -473,137 +773,473 @@ function AppContent() {
           borderRadius: '12px',
           border: '2px solid #667eea'
         }}>
-          <h3 style={{ marginBottom: '16px', color: '#333' }}>🍽️ Analysis Results</h3>
-          
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px', marginBottom: '20px' }}>
-            <div style={{ textAlign: 'center', padding: '12px', background: 'white', borderRadius: '8px' }}>
-              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#667eea' }}>
-                {analysis.total_calories || 0}
-              </div>
-              <div style={{ fontSize: '14px', color: '#666' }}>Calories</div>
-            </div>
-            
-            <div style={{ textAlign: 'center', padding: '12px', background: 'white', borderRadius: '8px' }}>
-              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#667eea' }}>
-                {analysis.total_protein || 0}g
-              </div>
-              <div style={{ fontSize: '14px', color: '#666' }}>Protein</div>
-            </div>
-            
-            <div style={{ textAlign: 'center', padding: '12px', background: 'white', borderRadius: '8px' }}>
-              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#667eea' }}>
-                {analysis.total_carbs || 0}g
-              </div>
-              <div style={{ fontSize: '14px', color: '#666' }}>Carbs</div>
-            </div>
-            
-            <div style={{ textAlign: 'center', padding: '12px', background: 'white', borderRadius: '8px' }}>
-              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#667eea' }}>
-                {analysis.total_fat || 0}g
-              </div>
-              <div style={{ fontSize: '14px', color: '#666' }}>Fat</div>
-            </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h3 style={{ color: '#333', margin: 0 }}>🍽️ Analysis Results</h3>
           </div>
           
+          {/* Updated Totals Display */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px', marginBottom: '20px' }}>
+            {(() => {
+              const totals = getUpdatedTotals();
+              return (
+                <>
+                  <div style={{ textAlign: 'center', padding: '12px', background: 'white', borderRadius: '8px' }}>
+                    <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#667eea' }}>
+                      {totals.calories}
+                    </div>
+                    <div style={{ fontSize: '14px', color: '#666' }}>Calories</div>
+                  </div>
+                  
+                  <div style={{ textAlign: 'center', padding: '12px', background: 'white', borderRadius: '8px' }}>
+                    <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#667eea' }}>
+                      {totals.protein}g
+                    </div>
+                    <div style={{ fontSize: '14px', color: '#666' }}>Protein</div>
+                  </div>
+                  
+                  <div style={{ textAlign: 'center', padding: '12px', background: 'white', borderRadius: '8px' }}>
+                    <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#667eea' }}>
+                      {totals.carbs}g
+                    </div>
+                    <div style={{ fontSize: '14px', color: '#666' }}>Carbs</div>
+                  </div>
+                  
+                  <div style={{ textAlign: 'center', padding: '12px', background: 'white', borderRadius: '8px' }}>
+                    <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#667eea' }}>
+                      {totals.fat}g
+                    </div>
+                    <div style={{ fontSize: '14px', color: '#666' }}>Fat</div>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+
+          {/* Yumlog Analysis Notes */}
           {analysis.notes && (
             <div style={{ 
               padding: '16px', 
               background: 'white', 
               borderRadius: '8px',
-              borderLeft: '4px solid #667eea'
+              borderLeft: '4px solid #667eea',
+              marginBottom: '20px'
             }}>
-              <h4 style={{ marginBottom: '8px', color: '#333' }}>AI Notes:</h4>
+              <h4 style={{ marginBottom: '8px', color: '#333' }}>Yumlog says:</h4>
               <p style={{ color: '#666', lineHeight: '1.6', margin: 0 }}>
                 {analysis.notes}
               </p>
             </div>
           )}
+
+          {/* Ingredients Breakdown */}
+          <div style={{ marginBottom: '20px' }}>
+            <h4 style={{ marginBottom: '16px', color: '#333' }}>📋 Ingredients Breakdown</h4>
+            
+            {editableIngredients.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '20px', color: '#6c757d', background: 'white', borderRadius: '8px' }}>
+                No ingredients detected. Add some manually below.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {editableIngredients.map((ingredient) => (
+                  <div key={ingredient.id} style={{ 
+                    background: 'white', 
+                    borderRadius: '8px', 
+                    padding: '16px',
+                    border: ingredient.confidence === 'user_added' ? '2px solid #28a745' : '1px solid #e9ecef'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                          <h5 style={{ margin: 0, color: '#333', fontSize: '16px' }}>
+                            {ingredient.name}
+                          </h5>
+                          {ingredient.confidence === 'user_added' && (
+                            <span style={{ 
+                              background: '#28a745', 
+                              color: 'white', 
+                              padding: '2px 6px', 
+                              borderRadius: '4px', 
+                              fontSize: '10px',
+                              fontWeight: 'bold'
+                            }}>
+                              ADDED
+                            </span>
+                          )}
+                          {ingredient.confidence === 'low' && (
+                            <span style={{ 
+                              background: '#ffc107', 
+                              color: '#333', 
+                              padding: '2px 6px', 
+                              borderRadius: '4px', 
+                              fontSize: '10px',
+                              fontWeight: 'bold'
+                            }}>
+                              LOW CONFIDENCE
+                            </span>
+                          )}
+                        </div>
+                        <p style={{ margin: 0, color: '#666', fontSize: '14px' }}>
+                          {formatServingDisplay(ingredient.originalQuantity, ingredient.servingMultiplier)}
+                        </p>
+                      </div>
+                      
+                      <button 
+                        onClick={() => removeIngredient(ingredient.id)}
+                        style={{ 
+                          background: '#dc3545', 
+                          color: 'white', 
+                          border: 'none', 
+                          borderRadius: '4px', 
+                          padding: '4px 8px',
+                          cursor: 'pointer',
+                          fontSize: '12px'
+                        }}
+                      >
+                        <Trash size={12} />
+                      </button>
+                    </div>
+                    
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', gap: '8px', marginBottom: '12px' }}>
+                      <div style={{ textAlign: 'center', padding: '8px', background: '#f8f9fa', borderRadius: '4px' }}>
+                        <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#667eea' }}>{ingredient.calories}</div>
+                        <div style={{ fontSize: '12px', color: '#666' }}>cal</div>
+                      </div>
+                      <div style={{ textAlign: 'center', padding: '8px', background: '#f8f9fa', borderRadius: '4px' }}>
+                        <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#667eea' }}>{ingredient.protein}g</div>
+                        <div style={{ fontSize: '12px', color: '#666' }}>protein</div>
+                      </div>
+                      <div style={{ textAlign: 'center', padding: '8px', background: '#f8f9fa', borderRadius: '4px' }}>
+                        <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#667eea' }}>{ingredient.carbs}g</div>
+                        <div style={{ fontSize: '12px', color: '#666' }}>carbs</div>
+                      </div>
+                      <div style={{ textAlign: 'center', padding: '8px', background: '#f8f9fa', borderRadius: '4px' }}>
+                        <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#667eea' }}>{ingredient.fat}g</div>
+                        <div style={{ fontSize: '12px', color: '#666' }}>fat</div>
+                      </div>
+                    </div>
+                    
+                    {/* Serving Size Adjustment */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <span style={{ fontSize: '14px', color: '#666', minWidth: '80px' }}>Serving:</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <button 
+                          onClick={() => updateIngredientServing(ingredient.id, ingredient.servingMultiplier - 0.1)}
+                          style={{ 
+                            background: '#6c757d', 
+                            color: 'white', 
+                            border: 'none', 
+                            borderRadius: '4px', 
+                            width: '32px', 
+                            height: '32px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          <Minus size={16} />
+                        </button>
+                        <span style={{ 
+                          minWidth: '40px', 
+                          textAlign: 'center', 
+                          fontWeight: 'bold',
+                          fontSize: '16px'
+                        }}>
+                          {ingredient.servingMultiplier.toFixed(1)}x
+                        </span>
+                        <button 
+                          onClick={() => updateIngredientServing(ingredient.id, ingredient.servingMultiplier + 0.1)}
+                          style={{ 
+                            background: '#6c757d', 
+                            color: 'white', 
+                            border: 'none', 
+                            borderRadius: '4px', 
+                            width: '32px', 
+                            height: '32px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          <Plus size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Add New Ingredient Form */}
+          <div style={{ 
+            background: 'white', 
+            borderRadius: '8px', 
+            padding: '16px',
+            border: '2px dashed #667eea',
+            marginBottom: '20px'
+          }}>
+            <h4 style={{ marginBottom: '16px', color: '#333' }}>✏️ Add or Edit Ingredients</h4>
+            <p style={{ marginBottom: '16px', color: '#666', fontSize: '14px' }}>
+              Describe what you want to add or change. For example: "Add 1 tablespoon of olive oil", 
+              "Remove the rice and add quinoa instead", or "The chicken is actually 6oz not 4oz".
+              <br /><br />
+              <strong>Note:</strong> Serving size adjustments (using the +/- buttons) and removing ingredients (using the trash button) are calculated automatically and don't require reanalysis. Only add new ingredients or correct ingredient names here.
+            </p>
+            <div style={{ marginBottom: '16px' }}>
+              <textarea
+                value={ingredientEditText}
+                onChange={(e) => handleIngredientEdit(e.target.value)}
+                placeholder="Describe ingredients to add or changes to make..."
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  border: '2px solid #e9ecef',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  fontFamily: 'inherit',
+                  resize: 'vertical',
+                  minHeight: '80px'
+                }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button 
+                onClick={() => {
+                  setIngredientEditText('');
+                  setHasUnanalyzedChanges(false);
+                }}
+                className="btn btn-secondary"
+                style={{ padding: '8px 16px', fontSize: '14px' }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={reanalyzeWithIngredients}
+                disabled={!ingredientEditText.trim() || isReanalyzing}
+                className="btn btn-primary"
+                style={{ 
+                  padding: '8px 16px', 
+                  fontSize: '14px',
+                  opacity: (!ingredientEditText.trim() || isReanalyzing) ? 0.6 : 1
+                }}
+              >
+                {isReanalyzing ? 'Reanalyzing...' : 'Reanalyze'}
+              </button>
+            </div>
+          </div>
+          
+          {/* Save Button */}
+          <div style={{ 
+            marginTop: '20px', 
+            padding: '16px', 
+            background: 'white', 
+            borderRadius: '8px',
+            border: '2px solid #28a745'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h4 style={{ margin: 0, color: '#333' }}>💾 Save Your Meal</h4>
+                <p style={{ margin: '4px 0 0 0', color: '#666', fontSize: '14px' }}>
+                  {hasUnanalyzedChanges 
+                    ? 'Please reanalyze your ingredient changes before saving' 
+                    : 'Save this meal with your ingredient modifications to your history'
+                  }
+                </p>
+              </div>
+              <button 
+                onClick={saveMealWithModifications}
+                disabled={hasUnanalyzedChanges}
+                className="btn btn-primary"
+                style={{ 
+                  padding: '12px 24px', 
+                  fontSize: '16px',
+                  background: hasUnanalyzedChanges ? '#6c757d' : '#28a745',
+                  border: 'none',
+                  opacity: hasUnanalyzedChanges ? 0.6 : 1,
+                  cursor: hasUnanalyzedChanges ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {hasUnanalyzedChanges ? 'Save (Disabled)' : 'Save Meal'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
   );
 
-  const renderHistoryTab = () => (
-    <div className="card">
-      <h2 style={{ marginBottom: '20px' }}>
-        📋 Meal History
-      </h2>
-      
-      {meals.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '40px', color: '#6c757d' }}>
-          <History size={48} style={{ marginBottom: '16px', opacity: 0.5 }} />
-          <p>No meals recorded yet. Upload a photo to get started!</p>
-        </div>
-      ) : (
-        <div className="meal-list">
-          {meals.map(meal => (
-            <div key={meal.id} className="meal-item">
-              <div className="meal-header">
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <img 
-                    src={`${API_BASE_URL.replace('/api', '')}/uploads/${meal.imagePath}`}
-                    alt="Food"
-                    className="meal-image"
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                    }}
-                  />
-                  <div className="meal-info">
-                    <div className="meal-title">
-                      {meal.analysis.meal_type || 'Meal'}
-                    </div>
-                    <div className="meal-time">
-                      {format(new Date(meal.createdAt), 'MMM dd, yyyy HH:mm')}
+  const renderHistoryTab = () => {
+    const toggleMealExpansion = (mealId) => {
+      const newExpanded = new Set(expandedMeals);
+      if (newExpanded.has(mealId)) {
+        newExpanded.delete(mealId);
+      } else {
+        newExpanded.add(mealId);
+      }
+      setExpandedMeals(newExpanded);
+    };
+
+    return (
+      <div className="card">
+        <h2 style={{ marginBottom: '20px' }}>
+          📋 Meal History
+        </h2>
+        
+        {meals.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px', color: '#6c757d' }}>
+            <History size={48} style={{ marginBottom: '16px', opacity: 0.5 }} />
+            <p>No meals recorded yet. Upload a photo to get started!</p>
+          </div>
+        ) : (
+          <div className="meal-list">
+            {meals.map(meal => (
+              <div key={meal.id} className="meal-item">
+                <div className="meal-header">
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <img 
+                      src={`${API_BASE_URL.replace('/api', '')}/uploads/${meal.imagePath}`}
+                      alt="Food"
+                      className="meal-image"
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                      }}
+                    />
+                    <div className="meal-info">
+                      <div className="meal-title">
+                        {meal.analysis.meal_type || 'Meal'}
+                      </div>
+                      <div className="meal-time">
+                        {format(new Date(meal.createdAt), 'MMM dd, yyyy HH:mm')}
+                      </div>
                     </div>
                   </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button 
+                      className="btn btn-secondary"
+                      onClick={() => toggleMealExpansion(meal.id)}
+                      style={{ padding: '8px 12px', fontSize: '12px' }}
+                    >
+                      {expandedMeals.has(meal.id) ? 'Hide' : 'Show'} Ingredients
+                    </button>
+                    <button 
+                      className="btn btn-secondary"
+                      onClick={() => deleteMeal(meal.id)}
+                      style={{ padding: '8px 12px' }}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </div>
-                <button 
-                  className="btn btn-secondary"
-                  onClick={() => deleteMeal(meal.id)}
-                  style={{ padding: '8px 12px' }}
-                >
-                  <Trash2 size={16} />
-                </button>
+                
+                {expandedMeals.has(meal.id) && meal.analysis.foods && meal.analysis.foods.length > 0 && (
+                  <div style={{ 
+                    marginTop: '16px', 
+                    padding: '16px', 
+                    background: '#f8f9fa', 
+                    borderRadius: '8px',
+                    border: '1px solid #e9ecef'
+                  }}>
+                    <h4 style={{ marginBottom: '12px', color: '#333', fontSize: '16px' }}>📋 Ingredients:</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {meal.analysis.foods.map((ingredient, index) => (
+                        <div key={index} style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          alignItems: 'center',
+                          padding: '8px 12px',
+                          background: 'white',
+                          borderRadius: '6px',
+                          border: ingredient.confidence === 'user_added' ? '2px solid #28a745' : '1px solid #e9ecef'
+                        }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                              <span style={{ fontWeight: 'bold', color: '#333' }}>{ingredient.name}</span>
+                              {ingredient.confidence === 'user_added' && (
+                                <span style={{ 
+                                  background: '#28a745', 
+                                  color: 'white', 
+                                  padding: '1px 4px', 
+                                  borderRadius: '3px', 
+                                  fontSize: '10px',
+                                  fontWeight: 'bold'
+                                }}>
+                                  ADDED
+                                </span>
+                              )}
+                              {ingredient.confidence === 'low' && (
+                                <span style={{ 
+                                  background: '#ffc107', 
+                                  color: '#333', 
+                                  padding: '1px 4px', 
+                                  borderRadius: '3px', 
+                                  fontSize: '10px',
+                                  fontWeight: 'bold'
+                                }}>
+                                  LOW
+                                </span>
+                              )}
+                            </div>
+                            <span style={{ fontSize: '12px', color: '#666' }}>
+                              {formatServingDisplay(
+                                ingredient.originalQuantity || ingredient.estimated_quantity, 
+                                ingredient.servingMultiplier || 1
+                              )}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: '#666' }}>
+                            <span>{ingredient.calories} cal</span>
+                            <span>{ingredient.protein}g protein</span>
+                            <span>{ingredient.carbs}g carbs</span>
+                            <span>{ingredient.fat}g fat</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {meal.note && (
+                  <div style={{ 
+                    marginTop: '12px', 
+                    padding: '12px', 
+                    background: '#f8f9fa', 
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    color: '#6c757d',
+                    borderLeft: '3px solid #667eea'
+                  }}>
+                    <strong>Note:</strong> {meal.note}
+                  </div>
+                )}
+
+                <div className="nutrition-grid">
+                  <div className="nutrition-item">
+                    <div className="nutrition-value">{meal.analysis.total_calories}</div>
+                    <div className="nutrition-label">Calories</div>
+                  </div>
+                  <div className="nutrition-item">
+                    <div className="nutrition-value">{meal.analysis.total_protein}g</div>
+                    <div className="nutrition-label">Protein</div>
+                  </div>
+                  <div className="nutrition-item">
+                    <div className="nutrition-value">{meal.analysis.total_carbs}g</div>
+                    <div className="nutrition-label">Carbs</div>
+                  </div>
+                  <div className="nutrition-item">
+                    <div className="nutrition-value">{meal.analysis.total_fat}g</div>
+                    <div className="nutrition-label">Fat</div>
+                  </div>
+                </div>
               </div>
-              
-              <div className="nutrition-grid">
-                <div className="nutrition-item">
-                  <div className="nutrition-value">{meal.analysis.total_calories}</div>
-                  <div className="nutrition-label">Calories</div>
-                </div>
-                <div className="nutrition-item">
-                  <div className="nutrition-value">{meal.analysis.total_protein}g</div>
-                  <div className="nutrition-label">Protein</div>
-                </div>
-                <div className="nutrition-item">
-                  <div className="nutrition-value">{meal.analysis.total_carbs}g</div>
-                  <div className="nutrition-label">Carbs</div>
-                </div>
-                <div className="nutrition-item">
-                  <div className="nutrition-value">{meal.analysis.total_fat}g</div>
-                  <div className="nutrition-label">Fat</div>
-                </div>
-              </div>
-              
-              {meal.note && (
-                <div style={{ 
-                  marginTop: '12px', 
-                  padding: '12px', 
-                  background: '#f8f9fa', 
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  color: '#6c757d',
-                  borderLeft: '3px solid #667eea'
-                }}>
-                  <strong>Note:</strong> {meal.note}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const renderAnalyticsTab = () => {
     const stats = getDailyStats();

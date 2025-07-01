@@ -101,10 +101,10 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Yumlog API is running' });
 });
 
-// Upload and analyze food image
-app.post('/api/analyze-food', authenticateUser, upload.single('image'), async (req, res) => {
+// Upload and analyze food image (without saving)
+app.post('/api/analyze-food-only', authenticateUser, upload.single('image'), async (req, res) => {
   try {
-    console.log('🔍 Starting food analysis request...');
+    console.log('🔍 Starting food analysis request (analysis only)...');
     
     if (!req.file) {
       console.log('❌ No image file provided');
@@ -113,6 +113,8 @@ app.post('/api/analyze-food', authenticateUser, upload.single('image'), async (r
 
     console.log('📁 File received:', req.file.filename, 'Size:', req.file.size, 'bytes');
     const imagePath = req.file.path;
+    
+    let analysis;
     
     // Check if OpenAI API key is configured
     if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'your_openai_api_key_here') {
@@ -123,9 +125,76 @@ app.post('/api/analyze-food', authenticateUser, upload.single('image'), async (r
     }
     
     console.log('🤖 Calling OpenAI API...');
-    // Analyze the image using OpenAI
-    const analysis = await analyzeFoodImage(imagePath);
+    // Check if ingredient notes are provided for reanalysis
+    const ingredientNotes = req.body.ingredient_notes;
+    if (ingredientNotes && ingredientNotes.trim()) {
+      console.log('📝 Reanalyzing with ingredient notes:', ingredientNotes);
+      analysis = await analyzeFoodImage(imagePath, ingredientNotes);
+    } else {
+      // Analyze the image using OpenAI
+      analysis = await analyzeFoodImage(imagePath);
+    }
     console.log('✅ OpenAI analysis completed');
+
+    res.json({
+      success: true,
+      analysis: analysis
+    });
+
+  } catch (error) {
+    console.error('❌ Error analyzing food:', error);
+    res.status(500).json({ 
+      error: 'Failed to analyze food image',
+      details: error.message 
+    });
+  }
+});
+
+// Upload and analyze food image (with saving)
+app.post('/api/analyze-food', authenticateUser, upload.single('image'), async (req, res) => {
+  try {
+    console.log('🔍 Starting food analysis request with saving...');
+    
+    if (!req.file) {
+      console.log('❌ No image file provided');
+      return res.status(400).json({ error: 'No image file provided' });
+    }
+
+    console.log('📁 File received:', req.file.filename, 'Size:', req.file.size, 'bytes');
+    const imagePath = req.file.path;
+    
+    let analysis;
+    
+    // Check if analysis is provided in request body (for modified ingredients)
+    if (req.body.analysis) {
+      console.log('📝 Using provided analysis (modified ingredients)');
+      try {
+        analysis = JSON.parse(req.body.analysis);
+      } catch (parseError) {
+        console.error('❌ Failed to parse provided analysis:', parseError);
+        return res.status(400).json({ error: 'Invalid analysis data provided' });
+      }
+    } else {
+      // Check if OpenAI API key is configured
+      if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'your_openai_api_key_here') {
+        console.log('❌ OpenAI API key not configured');
+        return res.status(500).json({ 
+          error: 'OpenAI API key not configured. Please add your API key to the .env file.' 
+        });
+      }
+      
+      console.log('🤖 Calling OpenAI API...');
+      // Check if ingredient notes are provided for reanalysis
+      const ingredientNotes = req.body.ingredient_notes;
+      if (ingredientNotes && ingredientNotes.trim()) {
+        console.log('📝 Reanalyzing with ingredient notes:', ingredientNotes);
+        analysis = await analyzeFoodImage(imagePath, ingredientNotes);
+      } else {
+        // Analyze the image using OpenAI
+        analysis = await analyzeFoodImage(imagePath);
+      }
+      console.log('✅ OpenAI analysis completed');
+    }
     
     // Get the note from request body, or use analysis notes if no note provided
     const userNote = req.body.note;
