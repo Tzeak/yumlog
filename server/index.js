@@ -12,7 +12,12 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: ['http://localhost:3000', 'https://yumlog.tzeak.com', 'https://www.yumlog.tzeak.com'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 app.use(express.static('public'));
 
@@ -53,19 +58,28 @@ initDatabase();
 // Authentication middleware
 const authenticateUser = async (req, res, next) => {
   try {
+    console.log('🔐 Authentication attempt for:', req.path);
+    console.log('📋 Headers:', req.headers);
+    
     const authHeader = req.headers.authorization;
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.log('❌ No authorization header or invalid format');
       return res.status(401).json({ error: 'No authorization token provided' });
     }
     
     const token = authHeader.substring(7);
+    console.log('🔑 Token received:', token.substring(0, 20) + '...');
     
     // For now, we'll use a simple token format: "user_id:phone_number"
     // In production, you should verify the token with Clerk's API
     const [userId, phoneNumber] = token.split(':');
     
+    console.log('👤 User ID:', userId);
+    console.log('📱 Phone/Email:', phoneNumber);
+    
     if (!userId || !phoneNumber) {
+      console.log('❌ Invalid token format - missing userId or phoneNumber');
       return res.status(401).json({ error: 'Invalid token format' });
     }
     
@@ -74,9 +88,10 @@ const authenticateUser = async (req, res, next) => {
     
     // Add user info to request
     req.user = { id: userId, phoneNumber };
+    console.log('✅ Authentication successful for user:', userId);
     next();
   } catch (error) {
-    console.error('Authentication error:', error);
+    console.error('❌ Authentication error:', error);
     res.status(401).json({ error: 'Authentication failed' });
   }
 };

@@ -29,17 +29,25 @@ function AppContent() {
   // Add auth token to all requests
   useEffect(() => {
     const interceptor = api.interceptors.request.use(async (config) => {
-      if (isSignedIn) {
+      if (isSignedIn && user) {
         try {
+          console.log('🔐 Creating auth token for user:', user.id);
+          console.log('📱 User phone:', user?.primaryPhoneNumber?.phoneNumber);
+          console.log('📧 User email:', user?.emailAddresses?.[0]?.emailAddress);
+          
           const token = await getToken();
           if (token) {
             // For Clerk, we'll use the user ID and phone number as our token
-            const phoneNumber = user?.primaryPhoneNumber?.phoneNumber || '';
-            config.headers.Authorization = `Bearer ${user.id}:${phoneNumber}`;
+            const phoneNumber = user?.primaryPhoneNumber?.phoneNumber || user?.emailAddresses?.[0]?.emailAddress || 'unknown';
+            const authToken = `${user.id}:${phoneNumber}`;
+            config.headers.Authorization = `Bearer ${authToken}`;
+            console.log('🔑 Auth token created:', authToken.substring(0, 20) + '...');
           }
         } catch (error) {
           console.error('Error getting auth token:', error);
         }
+      } else {
+        console.log('❌ Not signed in or no user data');
       }
       return config;
     });
@@ -57,10 +65,15 @@ function AppContent() {
 
   const fetchMeals = async () => {
     try {
+      console.log('📋 Fetching meals...');
+      console.log('🔗 API URL:', API_BASE_URL);
       const response = await api.get('/meals');
+      console.log('✅ Meals fetched successfully:', response.data);
       setMeals(response.data.meals || []);
     } catch (error) {
-      console.error('Error fetching meals:', error);
+      console.error('❌ Error fetching meals:', error);
+      console.error('📊 Error response:', error.response?.data);
+      console.error('🔢 Error status:', error.response?.status);
     }
   };
 
