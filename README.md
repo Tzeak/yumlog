@@ -2,7 +2,7 @@
 
 you eat food  
 you take a picture  
-yumlog guesses what it is and tells you what's in it  
+yumlog guesses what it is and tells you what's in it
 
 uses gpt-4 vision to analyze your meals  
 built with node + react + sqlite  
@@ -10,13 +10,14 @@ now with user authentication via Clerk.dev
 
 ## what it does
 
-- snap a photo of your food → get back estimated macros  
-- logs everything locally, keeps a meal history  
-- tracks your daily protein/carb/fat/sugar intake  
-- drag and drop interface, works on your phone  
+- describe your meal in text → get back estimated macros
+- optionally add a photo for enhanced accuracy
+- logs everything locally, keeps a meal history
+- tracks your daily protein/carb/fat/sugar intake
+- drag and drop interface, works on your phone
 - user authentication with phone numbers via Clerk.dev
 - each user has their own private meal log
-- runs offline (mostly), db is just a local sqlite file  
+- runs offline (mostly), db is just a local sqlite file
 
 ## getting started
 
@@ -74,7 +75,7 @@ npm run client
 
 open your browser:
 
-- frontend: http://localhost:3000  
+- frontend: http://localhost:3000
 - backend: http://localhost:3001
 
 ## env config
@@ -95,9 +96,10 @@ REACT_APP_CLERK_PUBLISHABLE_KEY=your_clerk_key
 ## how to use it
 
 1. sign in with your phone number
-2. drag an image in or upload one  
-3. click "analyze"  
-4. wait for ai to figure out what you're eating  
+2. describe your meal in the text field (be detailed for better results!)
+3. optionally add a photo for enhanced accuracy
+4. click "analyze"
+5. wait for ai to figure out what you're eating
 
 you'll get back something like:
 
@@ -133,12 +135,15 @@ uploads/                   ← where your meal pics go
 ## api
 
 ```
-GET    /api/health           → is the server up  
+GET    /api/health           → is the server up
 POST   /api/analyze-food     → send food image, get analysis (requires auth)
+POST   /api/analyze-text     → send text description, get analysis (requires auth)
+POST   /api/analyze-food-only → analyze image without saving (requires auth)
+POST   /api/analyze-text-only → analyze text without saving (requires auth)
 GET    /api/meals            → get meal history (requires auth)
 DELETE /api/meals/:id        → delete a meal (requires auth)
 GET    /api/user/profile     → get user profile (requires auth)
-GET    /uploads/:filename    → serve image files  
+GET    /uploads/:filename    → serve image files
 ```
 
 ## authentication
@@ -154,14 +159,14 @@ The app now uses Clerk.dev for user authentication:
 
 ### uploads not working?
 
-- is it under 10mb?  
-- is it a valid image file?  
+- is it under 10mb?
+- is it a valid image file?
 - does `uploads/` have write perms?
 
 ### api errors?
 
-- check if your key is right  
-- check if you've got quota  
+- check if your key is right
+- check if you've got quota
 - check your model access
 - make sure you're signed in
 
@@ -173,25 +178,25 @@ The app now uses Clerk.dev for user authentication:
 
 ### sqlite won't write?
 
-- is `data/` folder writable?  
+- is `data/` folder writable?
 - try restarting the backend
 
 ## dev tips
 
-- backend restarts: `npm run dev`  
-- frontend hot reloads: `npm run client`  
-- open devtools and network tab if things feel weird  
+- backend restarts: `npm run dev`
+- frontend hot reloads: `npm run client`
+- open devtools and network tab if things feel weird
 - logs go to console
 - check Clerk dashboard for auth logs
 
 ## todo (maybe)
 
-- better food parsing / ai prompt tuning  
-- mobile app  
-- export to csv  
-- recipe gen  
-- barcode scanner  
-- social / share meals  
+- better food parsing / ai prompt tuning
+- mobile app
+- export to csv
+- recipe gen
+- barcode scanner
+- social / share meals
 - sync with fitness stuff
 - email authentication option
 - user profile customization
@@ -202,9 +207,9 @@ MIT lol use it or don't
 
 ## credit
 
-- openai for the image model  
+- openai for the image model
 - clerk.dev for authentication
-- all the open source libs that do the real work  
+- all the open source libs that do the real work
 - you, for trying to eat better probably
 
 ---
