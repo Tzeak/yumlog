@@ -6,6 +6,89 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Function to normalize serving sizes to unit amounts
+function normalizeServingSizes(analysis) {
+  if (!analysis.foods || !Array.isArray(analysis.foods)) {
+    return analysis;
+  }
+
+  const normalizedFoods = analysis.foods.map((food) => {
+    const quantity = food.estimated_quantity;
+    if (!quantity) return food;
+
+    // Extract number and unit from quantity string
+    const quantityMatch = quantity.match(/^(\d+(?:\.\d+)?)\s*(.+)$/);
+    if (!quantityMatch) return food;
+
+    const [, numberStr, unit] = quantityMatch;
+    const number = parseFloat(numberStr);
+
+    // If it's more than 1 unit, normalize to unit amount
+    if (number > 1) {
+      const servingMultiplier = number;
+
+      // Create normalized food with unit serving
+      const normalizedFood = {
+        ...food,
+        estimated_quantity: `1 ${unit}`,
+        calories: Math.round((food.calories / servingMultiplier) * 100) / 100,
+        protein: Math.round((food.protein / servingMultiplier) * 100) / 100,
+        carbs: Math.round((food.carbs / servingMultiplier) * 100) / 100,
+        fat: Math.round((food.fat / servingMultiplier) * 100) / 100,
+        fiber: Math.round((food.fiber / servingMultiplier) * 100) / 100,
+        sugar: Math.round((food.sugar / servingMultiplier) * 100) / 100,
+        servingMultiplier: servingMultiplier,
+      };
+
+      return normalizedFood;
+    }
+
+    return food;
+  });
+
+  // Recalculate totals based on normalized foods
+  const totalCalories = normalizedFoods.reduce((sum, food) => {
+    const multiplier = food.servingMultiplier || 1;
+    return sum + food.calories * multiplier;
+  }, 0);
+
+  const totalProtein = normalizedFoods.reduce((sum, food) => {
+    const multiplier = food.servingMultiplier || 1;
+    return sum + food.protein * multiplier;
+  }, 0);
+
+  const totalCarbs = normalizedFoods.reduce((sum, food) => {
+    const multiplier = food.servingMultiplier || 1;
+    return sum + food.carbs * multiplier;
+  }, 0);
+
+  const totalFat = normalizedFoods.reduce((sum, food) => {
+    const multiplier = food.servingMultiplier || 1;
+    return sum + food.fat * multiplier;
+  }, 0);
+
+  const totalFiber = normalizedFoods.reduce((sum, food) => {
+    const multiplier = food.servingMultiplier || 1;
+    return sum + food.fiber * multiplier;
+  }, 0);
+
+  const totalSugar = normalizedFoods.reduce((sum, food) => {
+    const multiplier = food.servingMultiplier || 1;
+    return sum + food.sugar * multiplier;
+  }, 0);
+
+  return {
+    ...analysis,
+    foods: normalizedFoods,
+    total_calories: Math.round(totalCalories * 100) / 100,
+    total_protein: Math.round(totalProtein * 100) / 100,
+    total_carbs: Math.round(totalCarbs * 100) / 100,
+    total_fat: Math.round(totalFat * 100) / 100,
+    total_fiber: Math.round(totalFiber * 100) / 100,
+    total_sugar: Math.round(totalSugar * 100) / 100,
+  };
+}
+
 async function analyzeFoodImage(
   imagePath,
   ingredientNotes = null,
@@ -210,7 +293,12 @@ Provide detailed nutritional information. Be as accurate as possible with portio
       try {
         const analysis = JSON.parse(nutrition_analysis.text);
         console.log("✅ JSON parsed successfully");
-        return analysis;
+
+        // Normalize serving sizes to unit amounts
+        const normalizedAnalysis = normalizeServingSizes(analysis);
+        console.log("✅ Serving sizes normalized");
+
+        return normalizedAnalysis;
       } catch (parseError) {
         console.error(
           "❌ Failed to parse structured response as JSON:",
@@ -407,7 +495,12 @@ Be as accurate as possible with portion sizes and nutritional values. If you're 
       try {
         const analysis = JSON.parse(nutrition_analysis.text);
         console.log("✅ JSON parsed successfully for text analysis");
-        return analysis;
+
+        // Normalize serving sizes to unit amounts
+        const normalizedAnalysis = normalizeServingSizes(analysis);
+        console.log("✅ Serving sizes normalized for text analysis");
+
+        return normalizedAnalysis;
       } catch (parseError) {
         console.error(
           "❌ Failed to parse structured response as JSON:",
@@ -437,4 +530,5 @@ Be as accurate as possible with portion sizes and nutritional values. If you're 
 module.exports = {
   analyzeFoodImage,
   analyzeTextDescription,
+  normalizeServingSizes,
 };

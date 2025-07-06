@@ -12,6 +12,7 @@ now with user authentication via Clerk.dev
 
 - describe your meal in text → get back estimated macros
 - optionally add a photo for enhanced accuracy
+- **smart serving size normalization** - automatically converts multiple units to single servings (e.g., "3 pieces" becomes "1 piece × 3.0 servings")
 - logs everything locally, keeps a meal history
 - tracks your daily protein/carb/fat/sugar intake
 - drag and drop interface, works on your phone

@@ -235,17 +235,36 @@ function AppContent() {
     );
     if (analysis.foods && Array.isArray(analysis.foods)) {
       const ingredients = analysis.foods.map((food) => {
+        // Use the servingMultiplier from the backend if available, otherwise default to 1
+        const servingMultiplier = food.servingMultiplier || 1;
+
+        // Calculate the total values (unit values × multiplier) for display
+        const totalCalories = (food.calories || 0) * servingMultiplier;
+        const totalProtein = (food.protein || 0) * servingMultiplier;
+        const totalCarbs = (food.carbs || 0) * servingMultiplier;
+        const totalFat = (food.fat || 0) * servingMultiplier;
+        const totalFiber = (food.fiber || 0) * servingMultiplier;
+        const totalSugar = (food.sugar || 0) * servingMultiplier;
+
         const ingredient = {
           ...food,
           id: Math.random().toString(36).substr(2, 9), // Generate unique ID
           originalQuantity: food.estimated_quantity,
+          // Store the unit values as originals (for serving size calculations)
           originalCalories: food.calories || 0,
           originalProtein: food.protein || 0,
           originalCarbs: food.carbs || 0,
           originalFat: food.fat || 0,
           originalFiber: food.fiber || 0,
           originalSugar: food.sugar || 0,
-          servingMultiplier: 1,
+          servingMultiplier: servingMultiplier,
+          // Display the total values initially
+          calories: totalCalories,
+          protein: totalProtein,
+          carbs: totalCarbs,
+          fat: totalFat,
+          fiber: totalFiber,
+          sugar: totalSugar,
         };
         console.log("🍎 Processed ingredient:", ingredient);
         return ingredient;
@@ -1445,15 +1464,47 @@ function AppContent() {
                         >
                           <Minus size={16} />
                         </button>
-                        <span
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          step="0.1"
+                          min="0.1"
+                          max="10"
+                          defaultValue={ingredient.servingMultiplier.toFixed(1)}
+                          onBlur={(e) => {
+                            const value = parseFloat(e.target.value);
+                            if (isNaN(value) || value < 0.1) {
+                              updateIngredientServing(ingredient.id, 0.1);
+                            } else if (value > 10) {
+                              updateIngredientServing(ingredient.id, 10);
+                            } else {
+                              updateIngredientServing(ingredient.id, value);
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.target.blur();
+                            }
+                          }}
                           style={{
-                            minWidth: "40px",
+                            width: "60px",
                             textAlign: "center",
                             fontWeight: "bold",
                             fontSize: "16px",
+                            border: "2px solid #e9ecef",
+                            borderRadius: "4px",
+                            padding: "4px 8px",
+                            fontFamily: "inherit",
+                          }}
+                        />
+                        <span
+                          style={{
+                            fontWeight: "bold",
+                            fontSize: "16px",
+                            color: "#666",
                           }}
                         >
-                          {ingredient.servingMultiplier.toFixed(1)}x
+                          x
                         </span>
                         <button
                           onClick={() =>
