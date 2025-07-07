@@ -25,7 +25,13 @@
   "devDependencies": {
     "nodemon": "^3.0.1"
   },
-  "keywords": ["calorie", "tracking", "ai", "food", "nutrition"],
+  "keywords": [
+    "calorie",
+    "tracking",
+    "ai",
+    "food",
+    "nutrition"
+  ],
   "author": "Your Name",
   "license": "MIT"
-} 
+}

@@ -25,6 +25,10 @@ import {
   useClerk,
   useSignIn,
 } from "@clerk/clerk-react";
+import Yumdog from "./Yumdog";
+import GoldiePortrait from "./GoldiePortrait";
+import { useSwipeable } from "react-swipeable";
+import { AnimatePresence, motion } from "framer-motion";
 
 const API_BASE_URL =
   process.env.REACT_APP_API_URL || "http://localhost:3001/api";
@@ -33,6 +37,12 @@ const API_BASE_URL =
 const api = axios.create({
   baseURL: API_BASE_URL,
 });
+
+const TABS = [
+  { key: "upload", label: "Upload Photo", icon: Upload },
+  { key: "history", label: "History", icon: History },
+  { key: "analytics", label: "Analytics", icon: BarChart3 },
+];
 
 function AppContent() {
   const { user, isSignedIn, isLoaded } = useUser();
@@ -74,6 +84,50 @@ function AppContent() {
   // State for success message
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [lastSavedMeal, setLastSavedMeal] = useState(null);
+  const [swipeDirection, setSwipeDirection] = useState(0); // -1 for left, 1 for right
+
+  // Swipe handlers
+  const tabIndex = TABS.findIndex((tab) => tab.key === activeTab);
+  const swipeHandlers = useSwipeable({
+    onSwipedLeft: () => {
+      if (tabIndex < TABS.length - 1) {
+        setSwipeDirection(-1);
+        setActiveTab(TABS[tabIndex + 1].key);
+      }
+    },
+    onSwipedRight: () => {
+      if (tabIndex > 0) {
+        setSwipeDirection(1);
+        setActiveTab(TABS[tabIndex - 1].key);
+      }
+    },
+    trackMouse: true,
+    delta: 40,
+  });
+
+  // Animated slide transition
+  const getTabContent = () => {
+    switch (activeTab) {
+      case "upload":
+        return renderUploadTab();
+      case "history":
+        return renderHistoryTab();
+      case "analytics":
+        return renderAnalyticsTab();
+      default:
+        return null;
+    }
+  };
+
+  // Animation variants for sliding
+  const variants = {
+    enter: (direction) => ({ x: direction > 0 ? -60 : 60, opacity: 0 }),
+    center: { x: 0, opacity: 1 },
+    exit: (direction) => ({ x: direction > 0 ? 60 : -60, opacity: 0 }),
+  };
+
+  // Key for AnimatePresence
+  const pageKey = activeTab;
 
   // Add auth token to all requests
   useEffect(() => {
@@ -725,17 +779,6 @@ function AppContent() {
 
       {/* Unified Input Section */}
       <div style={{ marginBottom: "24px" }}>
-        <label
-          style={{
-            display: "block",
-            marginBottom: "8px",
-            fontWeight: "bold",
-            color: "#333",
-          }}
-        >
-          Log your meal:
-        </label>
-
         <div
           style={{
             border: "2px solid #e9ecef",
@@ -805,24 +848,6 @@ function AppContent() {
                     Click to upload or drag & drop
                   </p>
                 </div>
-
-                <button
-                  className="btn btn-primary"
-                  onClick={() =>
-                    document.getElementById("image-upload").click()
-                  }
-                  style={{
-                    padding: "10px 20px",
-                    fontSize: "16px",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    margin: "0 auto",
-                  }}
-                >
-                  <Image size={18} />
-                  Upload Photo
-                </button>
               </div>
             ) : (
               <div>
@@ -1194,8 +1219,16 @@ function AppContent() {
                 marginBottom: "20px",
               }}
             >
-              <h4 style={{ marginBottom: "8px", color: "#333" }}>
-                Yumlog says:
+              <h4
+                style={{
+                  marginBottom: "8px",
+                  color: "#333",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                }}
+              >
+                <GoldiePortrait size={62} /> Yumdog says:
               </h4>
               <p style={{ color: "#666", lineHeight: "1.6", margin: 0 }}>
                 {analysis.notes}
@@ -2001,8 +2034,13 @@ function AppContent() {
           }}
         >
           <div>
-            <h1>🍽️ Yumlog</h1>
-            <p>Upload a photo of your food and let AI analyze your nutrition</p>
+            <h1 style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <Yumdog size={48} />
+              Yumlog
+            </h1>
+            <p>
+              Upload a photo of your food and let Yumdog analyze your nutrition
+            </p>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <div
@@ -2041,33 +2079,55 @@ function AppContent() {
         </div>
       </div>
 
-      <div className="tabs">
-        <div
-          className={`tab ${activeTab === "upload" ? "active" : ""}`}
-          onClick={() => setActiveTab("upload")}
-        >
-          <Upload size={20} style={{ marginRight: "8px" }} />
-          Upload Photo
-        </div>
-        <div
-          className={`tab ${activeTab === "history" ? "active" : ""}`}
-          onClick={() => setActiveTab("history")}
-        >
-          <History size={20} style={{ marginRight: "8px" }} />
-          History
-        </div>
-        <div
-          className={`tab ${activeTab === "analytics" ? "active" : ""}`}
-          onClick={() => setActiveTab("analytics")}
-        >
-          <BarChart3 size={20} style={{ marginRight: "8px" }} />
-          Analytics
-        </div>
+      {/* Main content with swipeable and animated slide */}
+      <div
+        {...swipeHandlers}
+        className={`swipeable-content tab-${activeTab}`}
+        style={{ minHeight: "60vh" }}
+      >
+        <AnimatePresence initial={false} custom={swipeDirection} mode="wait">
+          <motion.div
+            key={pageKey}
+            custom={swipeDirection}
+            variants={variants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{ duration: 0.35, ease: [0.77, 0, 0.18, 1] }}
+            style={{ width: "100%" }}
+            onAnimationComplete={(definition) =>
+              definition === "center" && setSwipeDirection(0)
+            }
+          >
+            {getTabContent()}
+          </motion.div>
+        </AnimatePresence>
       </div>
 
-      {activeTab === "upload" && renderUploadTab()}
-      {activeTab === "history" && renderHistoryTab()}
-      {activeTab === "analytics" && renderAnalyticsTab()}
+      {/* Bottom tab bar */}
+      <div className="tabs tabs-bottom">
+        {TABS.map((tab, i) => (
+          <div
+            key={tab.key}
+            className={`tab${activeTab === tab.key ? " active" : ""}`}
+            onClick={() => {
+              setSwipeDirection(i > tabIndex ? -1 : 1);
+              setActiveTab(tab.key);
+            }}
+          >
+            <tab.icon size={20} style={{ marginRight: "8px" }} />
+            {tab.label}
+          </div>
+        ))}
+        {/* Tab bar indicator will be styled in CSS */}
+        <div
+          className="tab-indicator"
+          style={{
+            left: `${(tabIndex / TABS.length) * 100}%`,
+            width: `${100 / TABS.length}%`,
+          }}
+        />
+      </div>
 
       {/* Settings Modal */}
       {showSettings && (
@@ -2599,7 +2659,9 @@ function App() {
 
   return (
     <ClerkProvider publishableKey={publishableKey}>
-      <AppContent />
+      <div className="App">
+        <AppContent />
+      </div>
     </ClerkProvider>
   );
 }

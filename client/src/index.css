@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;700&family=Inter:wght@400;700&display=swap");
+
 * {
   margin: 0;
   padding: 0;
@@ -5,9 +7,7 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: "Inter", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -15,10 +15,121 @@ body {
   color: #333;
 }
 
+h1,
+h2,
+h3,
+h4,
+.header h1,
+.tab,
+.stat-value,
+.nutrition-value,
+.btn,
+label,
+.meal-title {
+  font-family: "Pixelify Sans", "VT323", "Share Tech Mono", monospace !important;
+  letter-spacing: 1px;
+}
+
+.header p,
+.stat-label,
+.nutrition-label,
+.meal-time,
+.meal-info,
+.meal-list,
+.card,
+.container,
+.nutrition-item,
+.upload-area,
+.btn-secondary,
+.btn-primary,
+.tab,
+.tabs,
+.App,
+.meal-header,
+.meal-item,
+.meal-title,
+.meal-info,
+.meal-time,
+.nutrition-grid,
+.stats-grid,
+.stat-card,
+.stat-label,
+.stat-value,
+.nutrition-label,
+.nutrition-value,
+.loading,
+.spinner,
+.header,
+.header h1,
+.header p {
+  font-family: "Inter", Arial, sans-serif;
+}
+
+/* Ensure pixel font is used for all major UI headings and buttons */
+.btn,
+.tab,
+.header h1,
+h1,
+h2,
+h3,
+h4,
+label,
+.stat-value,
+.nutrition-value,
+.meal-title {
+  font-family: "Pixelify Sans", "VT323", "Share Tech Mono", monospace !important;
+}
+
+/* Make sure font sizes are readable for pixel font */
+h1 {
+  font-size: 2.2rem;
+}
+h2 {
+  font-size: 1.4rem;
+}
+h3 {
+  font-size: 1.1rem;
+}
+h4 {
+  font-size: 1rem;
+}
+
+.tab {
+  font-size: 1rem;
+}
+.btn {
+  font-size: 1rem;
+}
+
+/* Keep body and subheadings clean and readable */
+p,
+.stat-label,
+.nutrition-label,
+.meal-time,
+.meal-info,
+.card,
+.container,
+.nutrition-item,
+.upload-area,
+.btn-secondary,
+.btn-primary {
+  font-family: "Inter", Arial, sans-serif;
+}
+
+/* Optional: Add a little shadow for pixel font headings for extra pop */
+h1,
+h2,
+h3,
+h4,
+.header h1 {
+  text-shadow: 1px 1px 0 #fff, 2px 2px 0 #764ba2;
+}
+
 .container {
   max-width: 1200px;
   margin: 0 auto;
   padding: 20px;
+  padding-bottom: 80px;
 }
 
 .card {
@@ -182,8 +293,12 @@ body {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 .header {
@@ -260,34 +375,149 @@ body {
   letter-spacing: 0.5px;
 }
 
+/* Frutiger Aero Glassmorphism Bottom Tab Bar - Stronger background, halo text */
+.tabs.tabs-bottom {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  width: 75vw;
+  max-width: 480px;
+  min-width: 260px;
+  transform: translateX(-50%);
+  background: linear-gradient(
+    90deg,
+    rgba(120, 200, 255, 0.92) 0%,
+    rgba(0, 255, 255, 0.88) 100%
+  );
+  border: 1.5px solid rgba(255, 255, 255, 0.45);
+  display: flex;
+  z-index: 100;
+  box-shadow: 0 4px 32px 0 rgba(0, 80, 180, 0.18),
+    0 1.5px 0 0 rgba(255, 255, 255, 0.18) inset;
+  padding: 0;
+  height: 60px;
+  min-height: 60px;
+  backdrop-filter: blur(16px) saturate(1.5);
+  border-radius: 22px;
+  overflow: hidden;
+  background-image: url('data:image/svg+xml;utf8,<svg width="100%25" height="100%25" xmlns="http://www.w3.org/2000/svg"><circle cx="20" cy="30" r="8" fill="white" fill-opacity="0.12"/><circle cx="80" cy="50" r="4" fill="white" fill-opacity="0.10"/><circle cx="160" cy="20" r="6" fill="white" fill-opacity="0.08"/><circle cx="300" cy="40" r="10" fill="white" fill-opacity="0.10"/></svg>');
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+.tabs.tabs-bottom .tab {
+  flex: 1;
+  margin: 0;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  font-family: "Pixelify Sans", monospace;
+  color: #1a2340;
+  background: none;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  transition: color 0.18s, box-shadow 0.18s;
+  height: 100%;
+  min-width: 0;
+  min-height: 48px;
+  letter-spacing: 1px;
+  padding: 0 2px;
+  outline: none;
+  position: relative;
+  z-index: 2;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.32), 0 1px 0 #fff;
+}
+.tabs.tabs-bottom .tab.active {
+  /* Remove background, only pill shows */
+  background: none;
+  color: #1a2340;
+  box-shadow: none;
+  border-radius: 0;
+  z-index: 2;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.38), 0 1px 0 #fff;
+}
+.tabs.tabs-bottom .tab svg {
+  margin: 0 auto 2px auto;
+  display: block;
+  font-size: 1.2em;
+  filter: drop-shadow(0 0 6px #0008) drop-shadow(0 0 4px #aeefff);
+}
+
 @media (max-width: 768px) {
   .container {
     padding: 16px;
+    padding-bottom: 68px;
   }
-  
+
   .header h1 {
     font-size: 2rem;
   }
-  
+
   .nutrition-grid {
     grid-template-columns: repeat(2, 1fr);
   }
-  
+
   .stats-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .meal-header {
     flex-direction: column;
     align-items: flex-start;
   }
-  
+
   .meal-image {
     margin-bottom: 12px;
     margin-right: 0;
   }
-  
+
   .upload-area {
     padding: 20px;
   }
-} 
+
+  .tabs.tabs-bottom {
+    height: 52px;
+    min-height: 52px;
+    border-radius: 16px;
+    width: 94vw;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 8px;
+  }
+
+  .tabs.tabs-bottom .tab {
+    font-size: 0.92rem;
+    min-height: 40px;
+  }
+}
+
+.swipeable-content {
+  position: relative;
+  min-height: 60vh;
+  /* Slide animation will be handled by transform in JS if needed */
+}
+
+.tab-indicator {
+  position: absolute;
+  top: 4px;
+  left: 0;
+  height: calc(100% - 8px);
+  background: linear-gradient(
+    120deg,
+    rgba(255, 255, 255, 0.38) 0%,
+    rgba(120, 200, 255, 0.22) 100%
+  );
+  border-radius: 18px;
+  box-shadow: 0 2px 12px 0 rgba(120, 200, 255, 0.1),
+    0 1.5px 0 0 rgba(255, 255, 255, 0.1) inset;
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(8px) saturate(1.2);
+  transition: left 0.35s cubic-bezier(0.77, 0, 0.18, 1),
+    width 0.35s cubic-bezier(0.77, 0, 0.18, 1);
+  z-index: 1;
+  pointer-events: none;
+  width: 33.33%; /* fallback for 3 tabs */
+}
