@@ -44,6 +44,19 @@ const TABS = [
   { key: "analytics", label: "Analytics", icon: BarChart3 },
 ];
 
+// Helper to log actions to the backend
+async function logUserAction({ phone, action, status }) {
+  try {
+    await fetch("/log-action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone, action, status }),
+    });
+  } catch (e) {
+    // Fail silently
+  }
+}
+
 function AppContent() {
   const { user, isSignedIn, isLoaded } = useUser();
   const { getToken } = useAuth();
@@ -85,6 +98,8 @@ function AppContent() {
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [lastSavedMeal, setLastSavedMeal] = useState(null);
   const [swipeDirection, setSwipeDirection] = useState(0); // -1 for left, 1 for right
+
+  const phone = user?.primaryPhoneNumber?.phoneNumber || "unknown user";
 
   // Swipe handlers
   const tabIndex = TABS.findIndex((tab) => tab.key === activeTab);
@@ -180,6 +195,12 @@ function AppContent() {
     }
   }, [isSignedIn]);
 
+  useEffect(() => {
+    if (isSignedIn && user) {
+      logUserAction({ phone, action: "signed in" });
+    }
+  }, [isSignedIn, user]);
+
   const fetchMeals = async () => {
     try {
       console.log("📋 Fetching meals...");
@@ -219,6 +240,7 @@ function AppContent() {
 
     setIsAnalyzing(true);
     try {
+      logUserAction({ phone, action: "clicked Analyze Food" });
       let data;
 
       if (selectedImage) {
@@ -247,9 +269,15 @@ function AppContent() {
       setAnalysis(data.data.analysis);
       initializeEditableIngredients(data.data.analysis);
       // Don't fetch meals here since we haven't saved yet
+      logUserAction({ phone, action: "analyzeFood success" });
     } catch (error) {
       console.error("Error analyzing food:", error);
       alert("Failed to analyze food. Please try again.");
+      logUserAction({
+        phone,
+        action: "analyzeFood error",
+        status: error?.response?.status || 500,
+      });
     } finally {
       setIsAnalyzing(false);
     }
@@ -257,14 +285,21 @@ function AppContent() {
 
   const deleteMeal = async (mealId) => {
     try {
+      logUserAction({ phone, action: `deleteMeal ${mealId}` });
       await api.delete(`/meals/${mealId}`);
       await fetchMeals();
     } catch (error) {
       console.error("Error deleting meal:", error);
+      logUserAction({
+        phone,
+        action: "deleteMeal error",
+        status: error?.response?.status || 500,
+      });
     }
   };
 
   const resetUpload = () => {
+    logUserAction({ phone, action: "used Reset Upload" });
     setSelectedImage(null);
     setImagePreview(null);
     setAnalysis(null);
@@ -415,6 +450,7 @@ function AppContent() {
     if (!analysis || editableIngredients.length === 0) return;
 
     try {
+      logUserAction({ phone, action: "clicked Save Meal" });
       const totals = getUpdatedTotals();
 
       // Create updated analysis with modified ingredients
@@ -479,9 +515,15 @@ function AppContent() {
         setShowSuccessMessage(false);
         setLastSavedMeal(null);
       }, 5000);
+      logUserAction({ phone, action: "saveMeal success" });
     } catch (error) {
       console.error("Error saving meal with modifications:", error);
       alert("Failed to save meal modifications. Please try again.");
+      logUserAction({
+        phone,
+        action: "saveMeal error",
+        status: error?.response?.status || 500,
+      });
     }
   };
 
@@ -528,6 +570,7 @@ function AppContent() {
 
     setIsReanalyzing(true);
     try {
+      logUserAction({ phone, action: "reanalyzeWithIngredients" });
       // Build comprehensive ingredient notes including serving adjustments
       let comprehensiveNotes = ingredientEditText.trim();
 
@@ -580,9 +623,15 @@ function AppContent() {
       setIngredientEditText("");
       setHasUnanalyzedChanges(false);
       // Don't fetch meals here since we haven't saved yet
+      logUserAction({ phone, action: "reanalyzeWithIngredients success" });
     } catch (error) {
       console.error("Error reanalyzing food:", error);
       alert("Failed to reanalyze food. Please try again.");
+      logUserAction({
+        phone,
+        action: "reanalyzeWithIngredients error",
+        status: error?.response?.status || 500,
+      });
     } finally {
       setIsReanalyzing(false);
     }
@@ -2038,7 +2087,9 @@ function AppContent() {
               <Yumdog size={48} />
               Yumlog
             </h1>
-            <p>Upload a photo of your food and let AI analyze your nutrition</p>
+            <p>
+              Upload a photo of your food and let Yumdog analyze your nutrition
+            </p>
           </div>
           <div className="header-controls">
             <div

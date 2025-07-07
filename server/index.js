@@ -112,6 +112,18 @@ const authenticateUser = async (req, res, next) => {
   }
 };
 
+// Helper to log actions
+function logAction({ phone, action, status }) {
+  const timestamp = new Date().toISOString();
+  const logLine = `${timestamp} ${phone || "unknown user"} just did ${action}${
+    status ? ` [status: ${status}]` : ""
+  }\n`;
+  const logDir = path.join(__dirname, "../logs");
+  const logFile = path.join(logDir, "actions.log");
+  if (!fs.existsSync(logDir)) fs.mkdirSync(logDir);
+  fs.appendFileSync(logFile, logLine);
+}
+
 // Routes
 app.get("/api/health", (req, res) => {
   res.json({ status: "OK", message: "Yumlog API is running" });
@@ -479,13 +491,28 @@ app.get("/uploads/:filename", (req, res) => {
   }
 });
 
+// Logging endpoint
+app.post("/log-action", (req, res) => {
+  const { phone, action, status } = req.body;
+  try {
+    logAction({ phone, action, status });
+    res.status(200).json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: "Failed to log action" });
+  }
+});
+
 // Error handling middleware
-app.use((error, req, res, next) => {
-  console.error("Server error:", error);
-  res.status(500).json({
-    error: "Internal server error",
-    message: error.message,
-  });
+app.use((err, req, res, next) => {
+  const status = err.status || 500;
+  const phone =
+    req.body?.phone ||
+    req.user?.phoneNumber ||
+    req.query?.phone ||
+    "unknown user";
+  const action = `API error at ${req.method} ${req.originalUrl}: ${err.message}`;
+  logAction({ phone, action, status });
+  res.status(status).json({ error: err.message || "Internal Server Error" });
 });
 
 app.listen(PORT, () => {
@@ -495,3 +522,6 @@ app.listen(PORT, () => {
     `🔑 OpenAI API Key configured: ${process.env.OPENAI_API_KEY ? "Yes" : "No"}`
   );
 });
+
+// Export logAction for use in error logging
+module.exports = { app, logAction };

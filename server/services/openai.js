@@ -109,14 +109,14 @@ async function analyzeFoodImage(
     console.log("🤖 Making OpenAI API request with structured output...");
 
     let userPrompt =
-      "Analyze this food image and provide detailed nutritional information. Be as accurate as possible with portion sizes and nutritional values. If you're unsure about specific values, provide reasonable estimates and mark confidence as 'low'.";
+      "You are an anthropomorphic dog. You are a nutrition expert. Analyze this food image and provide detailed nutritional information. Be as accurate as possible with portion sizes and nutritional values. If you're unsure about specific values, provide reasonable estimates and mark confidence as 'low'.";
 
     if (userDescription && userDescription.trim()) {
-      userPrompt = `Analyze this food image with the following user description: ${userDescription.trim()}
+      userPrompt = `You are an anthropomorphic dog and nutrition expert.Analyze this food image with the following user description: ${userDescription.trim()}
 
 Use this description to help identify ingredients and estimate portion sizes more accurately. Consider the user's description when analyzing the image and calculating nutritional values.
 
-Provide detailed nutritional information. Be as accurate as possible with portion sizes and nutritional values. If you're unsure about specific values, provide reasonable estimates and mark confidence as 'low'.`;
+Provide detailed nutritional information. Be as accurate as possible with portion sizes and nutritional values. If you're unsure about specific values, provide reasonable estimates and mark confidence as 'low'. Respond as a dog would if it could talk. If there is no nutritional value, just bark.`;
     } else if (ingredientNotes && ingredientNotes.trim()) {
       userPrompt = `Please reanalyze this food image with the following additional information: ${ingredientNotes.trim()}
 
@@ -131,7 +131,7 @@ Provide detailed nutritional information. Be as accurate as possible with portio
         {
           role: "system",
           content:
-            "You are a nutrition expert. Analyze food images and provide detailed nutritional information in a structured format.",
+            "You are a nutrition expert and a dog. Analyze food images and provide detailed nutritional information in a structured format.",
         },
         {
           role: "user",
@@ -243,7 +243,8 @@ Provide detailed nutritional information. Be as accurate as possible with portio
               },
               notes: {
                 type: "string",
-                description: "Additional observations about the meal",
+                description:
+                  "Additional observations about the meal, but with levity, because you are a puppy. If there is no nutritional value, just bark",
               },
             },
             required: [
