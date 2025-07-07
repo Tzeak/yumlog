@@ -2038,11 +2038,9 @@ function AppContent() {
               <Yumdog size={48} />
               Yumlog
             </h1>
-            <p>
-              Upload a photo of your food and let Yumdog analyze your nutrition
-            </p>
+            <p>Upload a photo of your food and let AI analyze your nutrition</p>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <div className="header-controls">
             <div
               style={{
                 display: "flex",
