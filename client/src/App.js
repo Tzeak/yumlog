@@ -39,7 +39,7 @@ const api = axios.create({
 });
 
 const TABS = [
-  { key: "upload", label: "Upload Photo", icon: Upload },
+  { key: "upload", label: "Add Meal", icon: Upload },
   { key: "history", label: "History", icon: History },
   { key: "analytics", label: "Analytics", icon: BarChart3 },
 ];
@@ -1788,6 +1788,7 @@ function AppContent() {
                       />
                     ) : (
                       <div
+                        className="meal-image"
                         style={{
                           width: "60px",
                           height: "60px",

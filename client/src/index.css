@@ -491,7 +491,7 @@ h4,
 
   .meal-image {
     margin-bottom: 12px;
-    margin-right: 0;
+    margin-right: 12px;
   }
 
   .upload-area {
@@ -590,5 +590,80 @@ h4,
     box-sizing: border-box;
     font-size: 0.92rem;
     padding: 6px 8px;
+  }
+}
+
+@media (max-width: 400px) {
+  .header {
+    padding: 10px 2px 6px 2px;
+    margin-top: 2px;
+  }
+  h1 {
+    font-size: 1.2rem;
+  }
+  h2 {
+    font-size: 1rem;
+  }
+  h3,
+  h4 {
+    font-size: 0.95rem;
+  }
+  .card {
+    padding: 10px 4px;
+    border-radius: 10px;
+  }
+  .meal-list {
+    gap: 8px;
+  }
+  .meal-item {
+    padding: 10px;
+    border-radius: 8px;
+  }
+  .meal-header {
+    margin-bottom: 8px;
+  }
+  .meal-image {
+    width: 48px;
+    height: 48px;
+    margin-right: 8px;
+  }
+  .meal-title {
+    font-size: 1rem;
+  }
+  .meal-time {
+    font-size: 0.8rem;
+  }
+  .stats-grid,
+  .nutrition-grid {
+    gap: 8px;
+    grid-template-columns: 1fr !important;
+  }
+  .stat-card,
+  .nutrition-item {
+    padding: 10px;
+    border-radius: 8px;
+    font-size: 0.95rem;
+  }
+  .stat-value,
+  .nutrition-value {
+    font-size: 1.1rem;
+  }
+  .stat-label,
+  .nutrition-label {
+    font-size: 0.8rem;
+  }
+  .btn,
+  .tab {
+    font-size: 0.9rem;
+    padding: 6px 8px;
+  }
+  .header-controls > div,
+  .header-controls button {
+    font-size: 0.9rem;
+    padding: 5px 6px;
+    max-width: 120px;
+  }
+  .swipeable-content {
+    min-height: 40vh;
   }
 }
