@@ -8,6 +8,8 @@ require("dotenv").config();
 const {
   analyzeFoodImage,
   analyzeTextDescription,
+  analyzeGoalProgress,
+  analyzeTodayRecommendation,
 } = require("./services/openai");
 const {
   initDatabase,
@@ -440,6 +442,128 @@ app.post("/api/analyze-text", authenticateUser, async (req, res) => {
     console.error("❌ Error analyzing text:", error);
     res.status(500).json({
       error: "Failed to analyze text description",
+      details: error.message,
+    });
+  }
+});
+
+// Analyze goal progress
+app.post("/api/analyze-goal", authenticateUser, async (req, res) => {
+  try {
+    console.log("🎯 Starting goal analysis request...");
+
+    const { goal, meals } = req.body;
+
+    if (!goal || !meals || !Array.isArray(meals)) {
+      console.log("❌ Invalid goal or meals data provided");
+      return res
+        .status(400)
+        .json({ error: "Invalid goal or meals data provided" });
+    }
+
+    console.log(`🎯 Analyzing ${meals.length} meals for ${goal} goal`);
+
+    // Check if OpenAI API key is configured
+    if (
+      !process.env.OPENAI_API_KEY ||
+      process.env.OPENAI_API_KEY === "your_openai_api_key_here"
+    ) {
+      console.log("❌ OpenAI API key not configured");
+      return res.status(500).json({
+        error:
+          "OpenAI API key not configured. Please add your API key to the .env file.",
+      });
+    }
+
+    // Prepare meal data for analysis
+    const mealData = meals.map((meal) => ({
+      date: meal.createdAt,
+      calories: meal.analysis.total_calories || 0,
+      protein: meal.analysis.total_protein || 0,
+      carbs: meal.analysis.total_carbs || 0,
+      fat: meal.analysis.total_fat || 0,
+      fiber: meal.analysis.total_fiber || 0,
+      sugar: meal.analysis.total_sugar || 0,
+      foods: meal.analysis.foods || [],
+      note: meal.note || "",
+    }));
+
+    // Call the consolidated goal analysis function
+    const result = await analyzeGoalProgress(
+      goal,
+      mealData,
+      req.body.guidelines
+    );
+
+    res.json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    console.error("❌ Error analyzing goal progress:", error);
+    res.status(500).json({
+      error: "Failed to analyze goal progress",
+      details: error.message,
+    });
+  }
+});
+
+// Analyze today's recommendation
+app.post("/api/analyze-today", authenticateUser, async (req, res) => {
+  try {
+    console.log("📅 Starting today's recommendation request...");
+
+    const { goal, meals } = req.body;
+
+    if (!goal || !meals || !Array.isArray(meals)) {
+      console.log("❌ Invalid goal or meals data provided");
+      return res
+        .status(400)
+        .json({ error: "Invalid goal or meals data provided" });
+    }
+
+    console.log(`📅 Analyzing today's meals for ${goal} goal`);
+
+    // Check if OpenAI API key is configured
+    if (
+      !process.env.OPENAI_API_KEY ||
+      process.env.OPENAI_API_KEY === "your_openai_api_key_here"
+    ) {
+      console.log("❌ OpenAI API key not configured");
+      return res.status(500).json({
+        error:
+          "OpenAI API key not configured. Please add your API key to the .env file.",
+      });
+    }
+
+    // Prepare meal data for analysis
+    const mealData = meals.map((meal) => ({
+      date: meal.createdAt,
+      calories: meal.analysis.total_calories || 0,
+      protein: meal.analysis.total_protein || 0,
+      carbs: meal.analysis.total_carbs || 0,
+      fat: meal.analysis.total_fat || 0,
+      fiber: meal.analysis.total_fiber || 0,
+      sugar: meal.analysis.total_sugar || 0,
+      foods: meal.analysis.foods || [],
+      note: meal.note || "",
+    }));
+
+    // Call the consolidated today's recommendation function
+    const result = await analyzeTodayRecommendation(
+      goal,
+      mealData,
+      req.body.guidelines
+    );
+
+    res.json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    console.error("❌ Error analyzing today's recommendation:", error);
+    res.status(500).json({
+      error: "Failed to analyze today's recommendation",
       details: error.message,
     });
   }

@@ -1,26 +1,33 @@
-# 🍽️ yumlog
+# yumlog
 
-you eat food  
-you take a picture  
-yumlog guesses what it is and tells you what's in it
+a calorie tracking app that uses AI to analyze your food photos and give you nutrition info
 
-uses gpt-4 vision to analyze your meals  
-built with node + react + sqlite  
-now with user authentication via Clerk.dev
+## features
 
-## what it does
+- 📸 **Photo Analysis**: Upload food photos and get detailed nutrition breakdown
+- 📝 **Text Descriptions**: Describe your meals in detail for AI analysis
+- 🎯 **Diet Goals**: Track progress toward specific diet goals (currently keto)
+- 📊 **Smart Recommendations**: Get AI-powered advice on improving your diet compliance
+- 📋 **Meal History**: Browse and manage your logged meals
+- 🔐 **Secure Authentication**: Sign in with phone number or passkeys
+- 📱 **Mobile-Friendly**: Responsive design that works on all devices
 
-- describe your meal in text → get back estimated macros
-- optionally add a photo for enhanced accuracy
-- **smart serving size normalization** - automatically converts multiple units to single servings (e.g., "3 pieces" becomes "1 piece × 3.0 servings")
-- logs everything locally, keeps a meal history
-- tracks your daily protein/carb/fat/sugar intake
-- drag and drop interface, works on your phone
-- user authentication with phone numbers via Clerk.dev
-- each user has their own private meal log
-- runs offline (mostly), db is just a local sqlite file
+## goals feature
 
-## getting started
+The new Goals page helps you track progress toward specific diet goals:
+
+### 🥑 Keto Diet Goal
+
+- **Target Macros**: 70-80% fat, 20-25% protein, 5-10% carbs
+- **Daily Carb Limit**: 20-50g net carbs
+- **AI Analysis**: Analyzes your last 7 days of meals and provides:
+  - Current trend assessment
+  - Specific recommendations for improvement
+  - Macro breakdown and compliance metrics
+
+The AI looks at your meal history and provides personalized advice to help you stay on track with your chosen diet goal.
+
+## setup
 
 you'll need:
 

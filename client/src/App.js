@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import {
   Upload,
   Trash2,
-  BarChart3,
   History,
   Image,
   LogOut,
@@ -13,6 +12,7 @@ import {
   User,
   Plus,
   Minus,
+  Target,
 } from "lucide-react";
 import axios from "axios";
 import { format } from "date-fns";
@@ -41,7 +41,7 @@ const api = axios.create({
 const TABS = [
   { key: "upload", label: "Add Meal", icon: Upload },
   { key: "history", label: "History", icon: History },
-  { key: "analytics", label: "Analytics", icon: BarChart3 },
+  { key: "goals", label: "Goals", icon: Target },
 ];
 
 // Helper to log actions to the backend
@@ -69,22 +69,10 @@ function AppContent() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [meals, setMeals] = useState([]);
   const [analysis, setAnalysis] = useState(null);
-  const [note, setNote] = useState("");
   const [mealDescription, setMealDescription] = useState("");
-  const [hasPhoto, setHasPhoto] = useState(false);
 
   // New state for editable ingredients
   const [editableIngredients, setEditableIngredients] = useState([]);
-  const [newIngredient, setNewIngredient] = useState({
-    name: "",
-    quantity: "",
-    calories: 0,
-    protein: 0,
-    carbs: 0,
-    fat: 0,
-    fiber: 0,
-    sugar: 0,
-  });
 
   // State for expanded meals in history
   const [expandedMeals, setExpandedMeals] = useState(new Set());
@@ -98,6 +86,55 @@ function AppContent() {
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [lastSavedMeal, setLastSavedMeal] = useState(null);
   const [swipeDirection, setSwipeDirection] = useState(0); // -1 for left, 1 for right
+
+  // New state for goals
+  const [goalAnalysis, setGoalAnalysis] = useState(null);
+  const [isLoadingGoalProgress, setIsLoadingGoalProgress] = useState(false);
+  const [selectedGoal, setSelectedGoal] = useState("keto");
+  const [goalStats, setGoalStats] = useState(null);
+  const [relevantMeals, setRelevantMeals] = useState([]);
+  const [todayRecommendation, setTodayRecommendation] = useState(null);
+  const [isLoadingTodayRecommendation, setIsLoadingTodayRecommendation] =
+    useState(false);
+  const [goalGuidelines, setGoalGuidelines] = useState({
+    keto: {
+      name: "Keto Diet",
+      description: "Low-carb, high-fat diet for ketosis",
+      guidelines: `Keto Diet Guidelines:
+- Target macros: 70-80% fat, 20-25% protein, 5-10% carbs
+- Daily carb limit: 20-50g net carbs
+- Focus on high-fat foods, moderate protein, very low carbs
+- Avoid: grains, sugar, most fruits, starchy vegetables
+- Include: meat, fish, eggs, dairy, nuts, seeds, low-carb vegetables`,
+      inflammatoryFoods: [
+        "grains",
+        "sugar",
+        "processed foods",
+        "refined carbs",
+      ],
+    },
+    antiInflammatory: {
+      name: "Anti-Inflammatory",
+      description: "Reduce inflammation through diet",
+      guidelines: `Anti-Inflammatory Diet Guidelines:
+- Focus on whole, unprocessed foods
+- Include: fatty fish, berries, leafy greens, nuts, olive oil
+- Avoid: processed meats, refined carbs, added sugars, trans fats
+- Limit: alcohol, fried foods, excessive red meat
+- Emphasize: omega-3 rich foods, antioxidants, fiber`,
+      inflammatoryFoods: [
+        "processed meats",
+        "refined carbs",
+        "added sugars",
+        "trans fats",
+        "fried foods",
+        "excessive alcohol",
+      ],
+    },
+  });
+  const [editingGuidelines, setEditingGuidelines] = useState(false);
+  const [analysisCache, setAnalysisCache] = useState({});
+  const [todayRecommendationCache, setTodayRecommendationCache] = useState({});
 
   const phone = user?.primaryPhoneNumber?.phoneNumber || "unknown user";
 
@@ -127,8 +164,8 @@ function AppContent() {
         return renderUploadTab();
       case "history":
         return renderHistoryTab();
-      case "analytics":
-        return renderAnalyticsTab();
+      case "goals":
+        return renderGoalsTab();
       default:
         return null;
     }
@@ -219,7 +256,6 @@ function AppContent() {
     const file = event.target.files[0];
     if (file) {
       setSelectedImage(file);
-      setHasPhoto(true);
 
       // Create preview URL
       const reader = new FileReader();
@@ -231,7 +267,6 @@ function AppContent() {
       // If no file selected, reset the input
       setSelectedImage(null);
       setImagePreview(null);
-      setHasPhoto(false);
     }
   };
 
@@ -308,7 +343,6 @@ function AppContent() {
     setIngredientEditText("");
     setIsReanalyzing(false);
     setHasUnanalyzedChanges(false);
-    setHasPhoto(false);
     // Reset the file input
     const fileInput = document.getElementById("image-upload");
     if (fileInput) {
@@ -560,6 +594,331 @@ function AppContent() {
       { name: "Fat", value: stats.totalFat, color: "#f093fb" },
     ].filter((item) => item.value > 0);
   };
+
+  // New function to analyze goals
+  const analyzeGoalProgress = async (forceRefresh = false) => {
+    if (!meals.length) return;
+
+    const cacheKey = generateGoalAnalysisCacheKey(
+      selectedGoal,
+      meals,
+      goalGuidelines[selectedGoal]?.guidelines
+    );
+
+    // Check if we have cached results (only if not forcing refresh)
+    if (!forceRefresh && analysisCache[cacheKey]) {
+      const cached = analysisCache[cacheKey];
+      const cacheAge = Date.now() - cached.timestamp;
+      const oneDay = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+
+      // Use cache if it's less than 1 day old
+      if (cacheAge < oneDay) {
+        console.log("🎯 Using cached goal analysis");
+        setGoalAnalysis(cached.analysis);
+        setGoalStats(cached.stats);
+        setRelevantMeals(cached.relevantMeals || []);
+        return;
+      } else {
+        console.log("🎯 Cache expired, fetching fresh analysis");
+        // Remove expired cache entry
+        const newCache = { ...analysisCache };
+        delete newCache[cacheKey];
+        setAnalysisCache(newCache);
+        localStorage.setItem("yumlog_analysis_cache", JSON.stringify(newCache));
+      }
+    }
+
+    setIsLoadingGoalProgress(true);
+    try {
+      logUserAction({ phone, action: "analyzeGoalProgress" });
+
+      const response = await api.post("/analyze-goal", {
+        goal: selectedGoal,
+        meals: meals,
+        guidelines: goalGuidelines[selectedGoal]?.guidelines,
+      });
+
+      console.log("🎯 Goal analysis received:", response.data);
+
+      // Cache the results
+      const cacheData = {
+        analysis: response.data.analysis,
+        stats: response.data.stats,
+        relevantMeals: response.data.relevantMeals || [],
+        timestamp: Date.now(),
+      };
+      const newCache = { ...analysisCache, [cacheKey]: cacheData };
+      setAnalysisCache(newCache);
+      localStorage.setItem("yumlog_analysis_cache", JSON.stringify(newCache));
+
+      setGoalAnalysis(response.data.analysis);
+      setGoalStats(response.data.stats);
+      setRelevantMeals(response.data.relevantMeals || []);
+      logUserAction({ phone, action: "analyzeGoalProgress success" });
+    } catch (error) {
+      console.error("Error analyzing goal progress:", error);
+      logUserAction({
+        phone,
+        action: "analyzeGoalProgress error",
+        status: error?.response?.status || 500,
+      });
+    } finally {
+      setIsLoadingGoalProgress(false);
+    }
+  };
+
+  // New function to analyze today's meals specifically
+  const analyzeTodayRecommendation = async (forceRefresh = false) => {
+    if (!meals.length) return;
+
+    const cacheKey = generateTodayRecommendationCacheKey(
+      selectedGoal,
+      meals,
+      goalGuidelines[selectedGoal]?.guidelines
+    );
+
+    // Check if we have cached results (only if not forcing refresh)
+    if (!forceRefresh && todayRecommendationCache[cacheKey]) {
+      const cached = todayRecommendationCache[cacheKey];
+      const cacheAge = Date.now() - cached.timestamp;
+      const oneDay = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+
+      // Use cache if it's less than 1 day old
+      if (cacheAge < oneDay) {
+        console.log("📅 Using cached today's recommendation");
+        setTodayRecommendation(cached.recommendation);
+        return;
+      } else {
+        console.log("📅 Cache expired, fetching fresh recommendation");
+        // Remove expired cache entry
+        const newCache = { ...todayRecommendationCache };
+        delete newCache[cacheKey];
+        setTodayRecommendationCache(newCache);
+        localStorage.setItem("yumlog_today_cache", JSON.stringify(newCache));
+      }
+    }
+
+    setIsLoadingTodayRecommendation(true);
+    try {
+      logUserAction({ phone, action: "analyzeTodayRecommendation" });
+
+      const response = await api.post("/analyze-today", {
+        goal: selectedGoal,
+        meals: meals,
+        guidelines: goalGuidelines[selectedGoal]?.guidelines,
+      });
+
+      console.log("📅 Today's recommendation received:", response.data);
+
+      // Cache the results
+      const cacheData = {
+        recommendation: response.data.recommendation,
+        timestamp: Date.now(),
+      };
+      const newCache = { ...todayRecommendationCache, [cacheKey]: cacheData };
+      setTodayRecommendationCache(newCache);
+      localStorage.setItem("yumlog_today_cache", JSON.stringify(newCache));
+
+      setTodayRecommendation(response.data.recommendation);
+      logUserAction({ phone, action: "analyzeTodayRecommendation success" });
+    } catch (error) {
+      console.error("Error analyzing today's recommendation:", error);
+      logUserAction({
+        phone,
+        action: "analyzeTodayRecommendation error",
+        status: error?.response?.status || 500,
+      });
+    } finally {
+      setIsLoadingTodayRecommendation(false);
+    }
+  };
+
+  // Function to evaluate if a meal meets keto goals
+  const evaluateMealForGoal = (meal) => {
+    if (!meal.analysis) {
+      return { compliant: false, score: 0, details: {} };
+    }
+    if (selectedGoal === "keto") {
+      const { total_protein, total_carbs, total_fat } = meal.analysis;
+
+      // Keto criteria: low carbs (under 20g), moderate protein, high fat
+      const isLowCarb = total_carbs <= 20;
+      const isModerateProtein = total_protein >= 10 && total_protein <= 50;
+
+      // Calculate macro percentages
+      const totalMacros = total_protein + total_carbs + total_fat;
+      const fatPercentage =
+        totalMacros > 0 ? (total_fat / totalMacros) * 100 : 0;
+      const carbPercentage =
+        totalMacros > 0 ? (total_carbs / totalMacros) * 100 : 0;
+
+      const isHighFatPercentage = fatPercentage >= 60;
+      const isLowCarbPercentage = carbPercentage <= 10;
+
+      // Overall keto compliance
+      const isKetoCompliant =
+        isLowCarb && isHighFatPercentage && isLowCarbPercentage;
+
+      return {
+        compliant: isKetoCompliant,
+        score: isKetoCompliant
+          ? 100
+          : isLowCarb && isHighFatPercentage
+          ? 75
+          : isLowCarb
+          ? 50
+          : 25,
+        details: {
+          carbs: { value: total_carbs, good: isLowCarb },
+          fat: { value: total_fat, good: isHighFatPercentage },
+          protein: { value: total_protein, good: isModerateProtein },
+        },
+      };
+    } else if (selectedGoal === "antiInflammatory") {
+      // For anti-inflammatory, we'll rely on OpenAI analysis
+      // This is a placeholder until we get the analysis from backend
+      return { compliant: false, score: 0, details: {} };
+    }
+
+    return { compliant: false, score: 0, details: {} };
+  };
+
+  // Load guidelines from localStorage on component mount
+  useEffect(() => {
+    const savedGuidelines = localStorage.getItem("yumlog_goal_guidelines");
+    if (savedGuidelines) {
+      try {
+        const parsed = JSON.parse(savedGuidelines);
+        setGoalGuidelines((prev) => ({ ...prev, ...parsed }));
+      } catch (error) {
+        console.error("Error loading guidelines:", error);
+      }
+    }
+
+    // Load cache from localStorage
+    const savedAnalysisCache = localStorage.getItem("yumlog_analysis_cache");
+    if (savedAnalysisCache) {
+      try {
+        const parsed = JSON.parse(savedAnalysisCache);
+        setAnalysisCache(parsed);
+      } catch (error) {
+        console.error("Error loading analysis cache:", error);
+      }
+    }
+
+    const savedTodayCache = localStorage.getItem("yumlog_today_cache");
+    if (savedTodayCache) {
+      try {
+        const parsed = JSON.parse(savedTodayCache);
+        setTodayRecommendationCache(parsed);
+      } catch (error) {
+        console.error("Error loading today cache:", error);
+      }
+    }
+  }, []);
+
+  // Save guidelines to localStorage
+  const saveGuidelines = (goalType, newGuidelines) => {
+    const updated = { ...goalGuidelines, [goalType]: newGuidelines };
+    setGoalGuidelines(updated);
+    localStorage.setItem("yumlog_goal_guidelines", JSON.stringify(updated));
+
+    // Clear cache for this goal since guidelines changed
+    const goalCacheKeys = Object.keys(analysisCache).filter((key) =>
+      key.startsWith(goalType)
+    );
+    const todayCacheKeys = Object.keys(todayRecommendationCache).filter((key) =>
+      key.startsWith(goalType)
+    );
+
+    const newAnalysisCache = { ...analysisCache };
+    goalCacheKeys.forEach((key) => delete newAnalysisCache[key]);
+    setAnalysisCache(newAnalysisCache);
+    localStorage.setItem(
+      "yumlog_analysis_cache",
+      JSON.stringify(newAnalysisCache)
+    );
+
+    const newTodayCache = { ...todayRecommendationCache };
+    todayCacheKeys.forEach((key) => delete newTodayCache[key]);
+    setTodayRecommendationCache(newTodayCache);
+    localStorage.setItem("yumlog_today_cache", JSON.stringify(newTodayCache));
+  };
+
+  // Generate cache key for goal analysis
+  const generateGoalAnalysisCacheKey = (goal, meals, guidelines) => {
+    const mealsHash = meals
+      .map((meal) => ({
+        id: meal.id,
+        calories: meal.analysis?.total_calories || 0,
+        protein: meal.analysis?.total_protein || 0,
+        carbs: meal.analysis?.total_carbs || 0,
+        fat: meal.analysis?.total_fat || 0,
+        date: meal.createdAt,
+      }))
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    return `${goal}_${JSON.stringify(mealsHash)}_${guidelines || ""}`;
+  };
+
+  // Generate cache key for today's recommendation
+  const generateTodayRecommendationCacheKey = (goal, meals, guidelines) => {
+    const today = new Date();
+    const todayStart = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate()
+    );
+    const todayEnd = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate() + 1
+    );
+
+    const todayMeals = meals
+      .filter((meal) => {
+        const mealDate = new Date(meal.createdAt);
+        return mealDate >= todayStart && mealDate < todayEnd;
+      })
+      .map((meal) => ({
+        id: meal.id,
+        calories: meal.analysis?.total_calories || 0,
+        protein: meal.analysis?.total_protein || 0,
+        carbs: meal.analysis?.total_carbs || 0,
+        fat: meal.analysis?.total_fat || 0,
+        date: meal.createdAt,
+      }))
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    return `${goal}_today_${JSON.stringify(todayMeals)}_${guidelines || ""}`;
+  };
+
+  // Load goal analysis when goals tab is active and meals are available
+  useEffect(() => {
+    if (activeTab === "goals" && meals.length > 0) {
+      if (!goalAnalysis) {
+        analyzeGoalProgress(false); // Use cache on initial load
+      }
+      if (!todayRecommendation) {
+        analyzeTodayRecommendation(false); // Use cache on initial load
+      }
+    }
+  }, [activeTab, meals]);
+
+  // Reassess when goal changes
+  useEffect(() => {
+    if (activeTab === "goals" && meals.length > 0) {
+      // Clear previous analysis when goal changes
+      setGoalAnalysis(null);
+      setTodayRecommendation(null);
+      setGoalStats(null);
+      setRelevantMeals([]);
+
+      // Trigger new analysis for the selected goal (use cache if available)
+      analyzeGoalProgress(false);
+      analyzeTodayRecommendation(false);
+    }
+  }, [selectedGoal]);
 
   const reanalyzeWithIngredients = async () => {
     if (
@@ -916,7 +1275,6 @@ function AppContent() {
                   onClick={() => {
                     setSelectedImage(null);
                     setImagePreview(null);
-                    setHasPhoto(false);
                     // Reset the file input
                     const fileInput = document.getElementById("image-upload");
                     if (fileInput) {
@@ -2011,33 +2369,418 @@ function AppContent() {
     );
   };
 
-  const renderAnalyticsTab = () => {
+  const renderGoalsTab = () => {
     const stats = getDailyStats();
     const macroData = getMacroData();
 
     return (
       <div className="card">
-        <h2 style={{ marginBottom: "20px" }}>📊 Daily Analytics</h2>
+        <h2 style={{ marginBottom: "20px" }}>🎯 Yum Goals</h2>
 
-        <div className="stats-grid">
-          <div className="stat-card">
-            <div className="stat-value">{stats.totalCalories}</div>
-            <div className="stat-label">Total Calories</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-value">{stats.mealCount}</div>
-            <div className="stat-label">Meals Today</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-value">{stats.totalProtein}g</div>
-            <div className="stat-label">Total Protein</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-value">{stats.totalCarbs}g</div>
-            <div className="stat-label">Total Carbs</div>
+        {/* Goal Selection */}
+        <div style={{ marginBottom: "24px" }}>
+          <h3 style={{ marginBottom: "12px", color: "#333" }}>
+            Select Your Goal
+          </h3>
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+            <button
+              onClick={() => setSelectedGoal("keto")}
+              style={{
+                padding: "12px 20px",
+                background: selectedGoal === "keto" ? "#667eea" : "#f8f9fa",
+                color: selectedGoal === "keto" ? "white" : "#333",
+                border: "2px solid #667eea",
+                borderRadius: "8px",
+                cursor: "pointer",
+                fontWeight: "500",
+                transition: "all 0.2s ease",
+              }}
+            >
+              🥑 Keto Diet
+            </button>
+            <button
+              onClick={() => setSelectedGoal("antiInflammatory")}
+              style={{
+                padding: "12px 20px",
+                background:
+                  selectedGoal === "antiInflammatory" ? "#667eea" : "#f8f9fa",
+                color: selectedGoal === "antiInflammatory" ? "white" : "#333",
+                border: "2px solid #667eea",
+                borderRadius: "8px",
+                cursor: "pointer",
+                fontWeight: "500",
+                transition: "all 0.2s ease",
+              }}
+            >
+              🌿 Anti-Inflammatory
+            </button>
           </div>
         </div>
 
+        {/* Goal Analysis */}
+        {goalAnalysis && (
+          <div
+            style={{
+              marginBottom: "24px",
+              padding: "20px",
+              background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+              borderRadius: "12px",
+              color: "white",
+            }}
+          >
+            <h3
+              style={{
+                marginBottom: "16px",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+              }}
+            >
+              <GoldiePortrait size={32} />
+              Goal Assessment
+            </h3>
+            <div style={{ marginBottom: "16px" }}>
+              <p
+                style={{
+                  margin: "0 0 12px 0",
+                  fontSize: "16px",
+                  lineHeight: "1.6",
+                }}
+              >
+                <strong>Current Trend:</strong> {goalAnalysis.trend}
+              </p>
+              <p style={{ margin: "0", fontSize: "16px", lineHeight: "1.6" }}>
+                <strong>Recommendation:</strong> {goalAnalysis.recommendation}
+              </p>
+            </div>
+            <button
+              onClick={() => analyzeGoalProgress(true)}
+              disabled={isLoadingGoalProgress}
+              style={{
+                background: "rgba(255, 255, 255, 0.2)",
+                color: "white",
+                border: "1px solid rgba(255, 255, 255, 0.3)",
+                borderRadius: "6px",
+                padding: "8px 16px",
+                cursor: "pointer",
+                fontSize: "14px",
+              }}
+            >
+              {isLoadingGoalProgress ? "Analyzing..." : "Refresh Analysis"}
+            </button>
+          </div>
+        )}
+
+        {/* Today's Recommendation */}
+        {todayRecommendation && (
+          <div
+            style={{
+              marginBottom: "24px",
+              padding: "20px",
+              background: "linear-gradient(135deg, #28a745 0%, #20c997 100%)",
+              borderRadius: "12px",
+              color: "white",
+            }}
+          >
+            <h3
+              style={{
+                marginBottom: "16px",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+              }}
+            >
+              <GoldiePortrait size={32} />
+              Today's Recommendation
+            </h3>
+            <div style={{ marginBottom: "16px" }}>
+              <p style={{ margin: "0", fontSize: "16px", lineHeight: "1.6" }}>
+                {todayRecommendation}
+              </p>
+            </div>
+            <button
+              onClick={() => analyzeTodayRecommendation(true)}
+              disabled={isLoadingTodayRecommendation}
+              style={{
+                background: "rgba(255, 255, 255, 0.2)",
+                color: "white",
+                border: "1px solid rgba(255, 255, 255, 0.3)",
+                borderRadius: "6px",
+                padding: "8px 16px",
+                cursor: "pointer",
+                fontSize: "14px",
+              }}
+            >
+              {isLoadingTodayRecommendation
+                ? "Analyzing..."
+                : "Refresh Today's Advice"}
+            </button>
+          </div>
+        )}
+
+        {/* Loading State for Today's Recommendation */}
+        {isLoadingTodayRecommendation && !todayRecommendation && (
+          <div
+            style={{
+              marginBottom: "24px",
+              padding: "20px",
+              background: "#f8f9fa",
+              borderRadius: "12px",
+              textAlign: "center",
+            }}
+          >
+            <div
+              className="spinner"
+              style={{ margin: "0 auto 12px auto" }}
+            ></div>
+            <p style={{ margin: 0, color: "#666" }}>
+              Getting today's recommendation...
+            </p>
+          </div>
+        )}
+
+        {/* Analysis Stats */}
+        {goalStats && (
+          <div
+            style={{
+              marginBottom: "24px",
+              padding: "20px",
+              background: "white",
+              borderRadius: "12px",
+              border: "2px solid #667eea",
+            }}
+          >
+            <h3 style={{ marginBottom: "16px", color: "#333" }}>
+              📊 Analysis Data
+            </h3>
+            <div style={{ marginBottom: "16px" }}>
+              <p
+                style={{ margin: "0 0 8px 0", fontSize: "14px", color: "#666" }}
+              >
+                <strong>Meals Analyzed:</strong> {goalStats.recentMeals} (last 7
+                days)
+              </p>
+              <p
+                style={{ margin: "0 0 8px 0", fontSize: "14px", color: "#666" }}
+              >
+                <strong>Average Calories:</strong>{" "}
+                {goalStats.avgCalories.toFixed(0)} per day
+              </p>
+              <p
+                style={{ margin: "0 0 8px 0", fontSize: "14px", color: "#666" }}
+              >
+                <strong>Macro Breakdown:</strong>{" "}
+                {goalStats.proteinPercent.toFixed(1)}% protein,{" "}
+                {goalStats.carbsPercent.toFixed(1)}% carbs,{" "}
+                {goalStats.fatPercent.toFixed(1)}% fat
+              </p>
+              <p style={{ margin: "0", fontSize: "14px", color: "#666" }}>
+                <strong>Average Macros:</strong>{" "}
+                {goalStats.avgProtein.toFixed(1)}g protein,{" "}
+                {goalStats.avgCarbs.toFixed(1)}g carbs,{" "}
+                {goalStats.avgFat.toFixed(1)}g fat
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Relevant Meals */}
+        {relevantMeals.length > 0 && (
+          <div
+            style={{
+              marginBottom: "24px",
+              padding: "20px",
+              background: "white",
+              borderRadius: "12px",
+              border: "1px solid #e9ecef",
+            }}
+          >
+            <h3 style={{ marginBottom: "16px", color: "#333" }}>
+              🍽️ Recent Meals (Last 7 Days)
+            </h3>
+            <div style={{ maxHeight: "300px", overflowY: "auto" }}>
+              {relevantMeals.map((meal, index) => {
+                const goalEvaluation = evaluateMealForGoal(meal);
+                const getScoreColor = (score) => {
+                  if (score >= 80) return "#28a745"; // Green
+                  if (score >= 60) return "#ffc107"; // Yellow
+                  if (score >= 40) return "#fd7e14"; // Orange
+                  return "#dc3545"; // Red
+                };
+
+                return (
+                  <div
+                    key={index}
+                    style={{
+                      padding: "12px",
+                      marginBottom: "8px",
+                      background: goalEvaluation.compliant
+                        ? "rgba(40, 167, 69, 0.1)"
+                        : "#f8f9fa",
+                      borderRadius: "8px",
+                      border: goalEvaluation.compliant
+                        ? "2px solid #28a745"
+                        : "1px solid #e9ecef",
+                      position: "relative",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: "8px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                        }}
+                      >
+                        <span style={{ fontWeight: "500", color: "#333" }}>
+                          {new Date(meal.date).toLocaleDateString()}
+                        </span>
+                        <span
+                          style={{
+                            padding: "2px 6px",
+                            borderRadius: "4px",
+                            fontSize: "10px",
+                            fontWeight: "bold",
+                            color: "white",
+                            background: getScoreColor(goalEvaluation.score),
+                          }}
+                        >
+                          {goalEvaluation.score}%
+                        </span>
+                        {goalEvaluation.compliant && (
+                          <span
+                            style={{
+                              padding: "2px 6px",
+                              borderRadius: "4px",
+                              fontSize: "10px",
+                              fontWeight: "bold",
+                              color: "white",
+                              background: "#28a745",
+                            }}
+                          >
+                            ✓ KETO
+                          </span>
+                        )}
+                      </div>
+                      <span style={{ fontSize: "12px", color: "#666" }}>
+                        {meal.calories.toFixed(0)} cal
+                      </span>
+                    </div>
+
+                    {/* Macro indicators with color coding */}
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "12px",
+                        fontSize: "12px",
+                        marginBottom: "8px",
+                      }}
+                    >
+                      <span
+                        style={{
+                          color: goalEvaluation.details.carbs?.good
+                            ? "#28a745"
+                            : "#dc3545",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        Carbs: {goalEvaluation.details.carbs?.value.toFixed(1)}g
+                      </span>
+                      <span
+                        style={{
+                          color: goalEvaluation.details.fat?.good
+                            ? "#28a745"
+                            : "#dc3545",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        Fat: {goalEvaluation.details.fat?.value.toFixed(1)}g
+                      </span>
+                      <span
+                        style={{
+                          color: goalEvaluation.details.protein?.good
+                            ? "#28a745"
+                            : "#dc3545",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        Protein:{" "}
+                        {goalEvaluation.details.protein?.value.toFixed(1)}g
+                      </span>
+                    </div>
+
+                    {meal.note && (
+                      <div
+                        style={{
+                          fontSize: "12px",
+                          color: "#666",
+                          fontStyle: "italic",
+                        }}
+                      >
+                        "{meal.note}"
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {isLoadingGoalProgress && !goalAnalysis && (
+          <div
+            style={{
+              marginBottom: "24px",
+              padding: "20px",
+              background: "#f8f9fa",
+              borderRadius: "12px",
+              textAlign: "center",
+            }}
+          >
+            <div
+              className="spinner"
+              style={{ margin: "0 auto 12px auto" }}
+            ></div>
+            <p style={{ margin: 0, color: "#666" }}>
+              Analyzing your progress...
+            </p>
+          </div>
+        )}
+
+        {/* Daily Stats */}
+        <div style={{ marginBottom: "24px" }}>
+          <h3 style={{ marginBottom: "16px", color: "#333" }}>
+            Today's Progress
+          </h3>
+          <div className="stats-grid">
+            <div className="stat-card">
+              <div className="stat-value">{stats.totalCalories}</div>
+              <div className="stat-label">Total Calories</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-value">{stats.totalProtein}g</div>
+              <div className="stat-label">Protein</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-value">{stats.totalCarbs}g</div>
+              <div className="stat-label">Carbs</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-value">{stats.totalFat}g</div>
+              <div className="stat-label">Fat</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Macro Distribution Chart */}
         {macroData.length > 0 && (
           <div style={{ marginTop: "30px" }}>
             <h3 style={{ marginBottom: "20px", textAlign: "center" }}>
@@ -2068,6 +2811,158 @@ function AppContent() {
             </div>
           </div>
         )}
+
+        {/* Editable Guidelines Section */}
+        <div
+          style={{
+            marginTop: "24px",
+            padding: "20px",
+            background: "#f8f9fa",
+            borderRadius: "12px",
+            border: "2px solid #667eea",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "16px",
+            }}
+          >
+            <h4 style={{ margin: 0, color: "#333" }}>
+              📋 {goalGuidelines[selectedGoal]?.name || selectedGoal} Guidelines
+            </h4>
+            <button
+              onClick={() => setEditingGuidelines(!editingGuidelines)}
+              style={{
+                padding: "6px 12px",
+                background: editingGuidelines ? "#dc3545" : "#667eea",
+                color: "white",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontSize: "12px",
+              }}
+            >
+              {editingGuidelines ? "Cancel" : "Edit"}
+            </button>
+          </div>
+
+          {editingGuidelines ? (
+            <div>
+              <textarea
+                value={goalGuidelines[selectedGoal]?.guidelines || ""}
+                onChange={(e) => {
+                  const updated = {
+                    ...goalGuidelines[selectedGoal],
+                    guidelines: e.target.value,
+                  };
+                  setGoalGuidelines((prev) => ({
+                    ...prev,
+                    [selectedGoal]: updated,
+                  }));
+                }}
+                style={{
+                  width: "100%",
+                  minHeight: "200px",
+                  padding: "12px",
+                  border: "1px solid #ddd",
+                  borderRadius: "6px",
+                  fontSize: "14px",
+                  fontFamily: "monospace",
+                  lineHeight: "1.4",
+                }}
+                placeholder="Enter your guidelines here..."
+              />
+              <div style={{ marginTop: "12px", display: "flex", gap: "8px" }}>
+                <button
+                  onClick={() => {
+                    saveGuidelines(selectedGoal, goalGuidelines[selectedGoal]);
+                    setEditingGuidelines(false);
+                  }}
+                  style={{
+                    padding: "8px 16px",
+                    background: "#28a745",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Save Guidelines
+                </button>
+                <button
+                  onClick={() => {
+                    // Reset to default
+                    const defaultGuidelines = {
+                      keto: {
+                        name: "Keto Diet",
+                        description: "Low-carb, high-fat diet for ketosis",
+                        guidelines: `Keto Diet Guidelines:
+- Target macros: 70-80% fat, 20-25% protein, 5-10% carbs
+- Daily carb limit: 20-50g net carbs
+- Focus on high-fat foods, moderate protein, very low carbs
+- Avoid: grains, sugar, most fruits, starchy vegetables
+- Include: meat, fish, eggs, dairy, nuts, seeds, low-carb vegetables`,
+                        inflammatoryFoods: [
+                          "grains",
+                          "sugar",
+                          "processed foods",
+                          "refined carbs",
+                        ],
+                      },
+                      antiInflammatory: {
+                        name: "Anti-Inflammatory",
+                        description: "Reduce inflammation through diet",
+                        guidelines: `Anti-Inflammatory Diet Guidelines:
+- Focus on whole, unprocessed foods
+- Include: fatty fish, berries, leafy greens, nuts, olive oil
+- Avoid: processed meats, refined carbs, added sugars, trans fats
+- Limit: alcohol, fried foods, excessive red meat
+- Emphasize: omega-3 rich foods, antioxidants, fiber`,
+                        inflammatoryFoods: [
+                          "processed meats",
+                          "refined carbs",
+                          "added sugars",
+                          "trans fats",
+                          "fried foods",
+                          "excessive alcohol",
+                        ],
+                      },
+                    };
+                    setGoalGuidelines((prev) => ({
+                      ...prev,
+                      [selectedGoal]: defaultGuidelines[selectedGoal],
+                    }));
+                  }}
+                  style={{
+                    padding: "8px 16px",
+                    background: "#6c757d",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Reset to Default
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div
+              style={{
+                fontSize: "14px",
+                color: "#666",
+                lineHeight: "1.6",
+                whiteSpace: "pre-line",
+              }}
+            >
+              {goalGuidelines[selectedGoal]?.guidelines ||
+                "No guidelines set for this goal."}
+            </div>
+          )}
+        </div>
       </div>
     );
   };
