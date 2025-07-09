@@ -735,22 +735,30 @@ function AppContent() {
 
   // Function to evaluate if a meal meets keto goals
   const evaluateMealForGoal = (meal) => {
-    if (!meal.analysis) {
-      return { compliant: false, score: 0, details: {} };
-    }
-    if (selectedGoal === "keto") {
-      const { total_protein, total_carbs, total_fat } = meal.analysis;
+    // Handle both original meal structure and processed meal structure
+    let protein, carbs, fat;
 
+    if (meal.analysis) {
+      // Original meal structure (from database)
+      protein = meal.analysis.total_protein || 0;
+      carbs = meal.analysis.total_carbs || 0;
+      fat = meal.analysis.total_fat || 0;
+    } else {
+      // Processed meal structure (from backend analysis)
+      protein = meal.protein || 0;
+      carbs = meal.carbs || 0;
+      fat = meal.fat || 0;
+    }
+
+    if (selectedGoal === "keto") {
       // Keto criteria: low carbs (under 20g), moderate protein, high fat
-      const isLowCarb = total_carbs <= 20;
-      const isModerateProtein = total_protein >= 10 && total_protein <= 50;
+      const isLowCarb = carbs <= 20;
+      const isModerateProtein = protein >= 10 && protein <= 50;
 
       // Calculate macro percentages
-      const totalMacros = total_protein + total_carbs + total_fat;
-      const fatPercentage =
-        totalMacros > 0 ? (total_fat / totalMacros) * 100 : 0;
-      const carbPercentage =
-        totalMacros > 0 ? (total_carbs / totalMacros) * 100 : 0;
+      const totalMacros = protein + carbs + fat;
+      const fatPercentage = totalMacros > 0 ? (fat / totalMacros) * 100 : 0;
+      const carbPercentage = totalMacros > 0 ? (carbs / totalMacros) * 100 : 0;
 
       const isHighFatPercentage = fatPercentage >= 60;
       const isLowCarbPercentage = carbPercentage <= 10;
@@ -769,9 +777,9 @@ function AppContent() {
           ? 50
           : 25,
         details: {
-          carbs: { value: total_carbs, good: isLowCarb },
-          fat: { value: total_fat, good: isHighFatPercentage },
-          protein: { value: total_protein, good: isModerateProtein },
+          carbs: { value: carbs, good: isLowCarb },
+          fat: { value: fat, good: isHighFatPercentage },
+          protein: { value: protein, good: isModerateProtein },
         },
       };
     } else if (selectedGoal === "antiInflammatory") {
