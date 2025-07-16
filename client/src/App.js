@@ -475,6 +475,15 @@ function AppContent() {
     return `${foodNames[0]}, ${foodNames[1]} & more`;
   };
 
+  // Helper function to format macro values as approximate whole numbers
+  const formatApproximateMacro = (value) => {
+    if (value === null || value === undefined || isNaN(value)) {
+      return "~0";
+    }
+    const rounded = Math.round(value);
+    return `~${rounded}`;
+  };
+
   const getGoalComplianceLabel = (score) => {
     if (score >= 90) return "Exceeds Goals";
     if (score >= 75) return "Meets Goals";
@@ -1419,26 +1428,41 @@ function AppContent() {
               }}
             >
               <div>
-                <div style={{ fontSize: "20px", fontWeight: "bold" }}>
-                  {lastSavedMeal.analysis.total_calories}
+                <div
+                  className="macro-display"
+                  style={{ fontSize: "20px", fontWeight: "bold" }}
+                >
+                  {formatApproximateMacro(
+                    lastSavedMeal.analysis.total_calories
+                  )}
                 </div>
                 <div style={{ fontSize: "12px", opacity: 0.9 }}>Calories</div>
               </div>
               <div>
-                <div style={{ fontSize: "20px", fontWeight: "bold" }}>
-                  {lastSavedMeal.analysis.total_protein}g
+                <div
+                  className="macro-display"
+                  style={{ fontSize: "20px", fontWeight: "bold" }}
+                >
+                  {formatApproximateMacro(lastSavedMeal.analysis.total_protein)}
+                  g
                 </div>
                 <div style={{ fontSize: "12px", opacity: 0.9 }}>Protein</div>
               </div>
               <div>
-                <div style={{ fontSize: "20px", fontWeight: "bold" }}>
-                  {lastSavedMeal.analysis.total_carbs}g
+                <div
+                  className="macro-display"
+                  style={{ fontSize: "20px", fontWeight: "bold" }}
+                >
+                  {formatApproximateMacro(lastSavedMeal.analysis.total_carbs)}g
                 </div>
                 <div style={{ fontSize: "12px", opacity: 0.9 }}>Carbs</div>
               </div>
               <div>
-                <div style={{ fontSize: "20px", fontWeight: "bold" }}>
-                  {lastSavedMeal.analysis.total_fat}g
+                <div
+                  className="macro-display"
+                  style={{ fontSize: "20px", fontWeight: "bold" }}
+                >
+                  {formatApproximateMacro(lastSavedMeal.analysis.total_fat)}g
                 </div>
                 <div style={{ fontSize: "12px", opacity: 0.9 }}>Fat</div>
               </div>
@@ -1532,13 +1556,14 @@ function AppContent() {
                     }}
                   >
                     <div
+                      className="macro-display"
                       style={{
                         fontSize: "24px",
                         fontWeight: "bold",
                         color: "#667eea",
                       }}
                     >
-                      {totals.calories}
+                      {formatApproximateMacro(totals.calories)}
                     </div>
                     <div style={{ fontSize: "14px", color: "#666" }}>
                       Calories
@@ -1554,13 +1579,14 @@ function AppContent() {
                     }}
                   >
                     <div
+                      className="macro-display"
                       style={{
                         fontSize: "24px",
                         fontWeight: "bold",
                         color: "#667eea",
                       }}
                     >
-                      {totals.protein}g
+                      {formatApproximateMacro(totals.protein)}g
                     </div>
                     <div style={{ fontSize: "14px", color: "#666" }}>
                       Protein
@@ -1576,13 +1602,14 @@ function AppContent() {
                     }}
                   >
                     <div
+                      className="macro-display"
                       style={{
                         fontSize: "24px",
                         fontWeight: "bold",
                         color: "#667eea",
                       }}
                     >
-                      {totals.carbs}g
+                      {formatApproximateMacro(totals.carbs)}g
                     </div>
                     <div style={{ fontSize: "14px", color: "#666" }}>Carbs</div>
                   </div>
@@ -1596,13 +1623,14 @@ function AppContent() {
                     }}
                   >
                     <div
+                      className="macro-display"
                       style={{
                         fontSize: "24px",
                         fontWeight: "bold",
                         color: "#667eea",
                       }}
                     >
-                      {totals.fat}g
+                      {formatApproximateMacro(totals.fat)}g
                     </div>
                     <div style={{ fontSize: "14px", color: "#666" }}>Fat</div>
                   </div>
@@ -2345,26 +2373,26 @@ function AppContent() {
 
                 <div className="nutrition-grid">
                   <div className="nutrition-item">
-                    <div className="nutrition-value">
-                      {meal.analysis.total_calories}
+                    <div className="nutrition-value macro-display">
+                      {formatApproximateMacro(meal.analysis.total_calories)}
                     </div>
                     <div className="nutrition-label">Calories</div>
                   </div>
                   <div className="nutrition-item">
-                    <div className="nutrition-value">
-                      {meal.analysis.total_protein}g
+                    <div className="nutrition-value macro-display">
+                      {formatApproximateMacro(meal.analysis.total_protein)}g
                     </div>
                     <div className="nutrition-label">Protein</div>
                   </div>
                   <div className="nutrition-item">
-                    <div className="nutrition-value">
-                      {meal.analysis.total_carbs}g
+                    <div className="nutrition-value macro-display">
+                      {formatApproximateMacro(meal.analysis.total_carbs)}g
                     </div>
                     <div className="nutrition-label">Carbs</div>
                   </div>
                   <div className="nutrition-item">
-                    <div className="nutrition-value">
-                      {meal.analysis.total_fat}g
+                    <div className="nutrition-value macro-display">
+                      {formatApproximateMacro(meal.analysis.total_fat)}g
                     </div>
                     <div className="nutrition-label">Fat</div>
                   </div>
@@ -2559,7 +2587,9 @@ function AppContent() {
                 style={{ margin: "0 0 8px 0", fontSize: "14px", color: "#666" }}
               >
                 <strong>Average Calories:</strong>{" "}
-                {goalStats.avgCalories.toFixed(0)} per day
+                <span className="macro-display">
+                  {formatApproximateMacro(goalStats.avgCalories)} per day
+                </span>
               </p>
               <p
                 style={{ margin: "0 0 8px 0", fontSize: "14px", color: "#666" }}
@@ -2571,9 +2601,11 @@ function AppContent() {
               </p>
               <p style={{ margin: "0", fontSize: "14px", color: "#666" }}>
                 <strong>Average Macros:</strong>{" "}
-                {goalStats.avgProtein.toFixed(1)}g protein,{" "}
-                {goalStats.avgCarbs.toFixed(1)}g carbs,{" "}
-                {goalStats.avgFat.toFixed(1)}g fat
+                <span className="macro-display">
+                  {formatApproximateMacro(goalStats.avgProtein)}g protein,{" "}
+                  {formatApproximateMacro(goalStats.avgCarbs)}g carbs,{" "}
+                  {formatApproximateMacro(goalStats.avgFat)}g fat
+                </span>
               </p>
             </div>
           </div>
@@ -2670,8 +2702,11 @@ function AppContent() {
                           {getGoalComplianceLabel(goalEvaluation.score)}
                         </span>
                       </div>
-                      <span style={{ fontSize: "12px", color: "#666" }}>
-                        {meal.calories.toFixed(0)} cal
+                      <span
+                        className="macro-display"
+                        style={{ fontSize: "12px", color: "#666" }}
+                      >
+                        {formatApproximateMacro(meal.calories)} cal
                       </span>
                     </div>
 
@@ -2685,6 +2720,7 @@ function AppContent() {
                       }}
                     >
                       <span
+                        className="macro-display"
                         style={{
                           color: goalEvaluation.details.carbs?.good
                             ? "#28a745"
@@ -2692,9 +2728,14 @@ function AppContent() {
                           fontWeight: "bold",
                         }}
                       >
-                        Carbs: {goalEvaluation.details.carbs?.value.toFixed(1)}g
+                        Carbs:{" "}
+                        {formatApproximateMacro(
+                          goalEvaluation.details.carbs?.value
+                        )}
+                        g
                       </span>
                       <span
+                        className="macro-display"
                         style={{
                           color: goalEvaluation.details.fat?.good
                             ? "#28a745"
@@ -2702,9 +2743,14 @@ function AppContent() {
                           fontWeight: "bold",
                         }}
                       >
-                        Fat: {goalEvaluation.details.fat?.value.toFixed(1)}g
+                        Fat:{" "}
+                        {formatApproximateMacro(
+                          goalEvaluation.details.fat?.value
+                        )}
+                        g
                       </span>
                       <span
+                        className="macro-display"
                         style={{
                           color: goalEvaluation.details.protein?.good
                             ? "#28a745"
@@ -2713,7 +2759,10 @@ function AppContent() {
                         }}
                       >
                         Protein:{" "}
-                        {goalEvaluation.details.protein?.value.toFixed(1)}g
+                        {formatApproximateMacro(
+                          goalEvaluation.details.protein?.value
+                        )}
+                        g
                       </span>
                     </div>
 
@@ -2763,19 +2812,27 @@ function AppContent() {
           </h3>
           <div className="stats-grid">
             <div className="stat-card">
-              <div className="stat-value">{stats.totalCalories}</div>
+              <div className="stat-value macro-display">
+                {formatApproximateMacro(stats.totalCalories)}
+              </div>
               <div className="stat-label">Total Calories</div>
             </div>
             <div className="stat-card">
-              <div className="stat-value">{stats.totalProtein}g</div>
+              <div className="stat-value macro-display">
+                {formatApproximateMacro(stats.totalProtein)}g
+              </div>
               <div className="stat-label">Protein</div>
             </div>
             <div className="stat-card">
-              <div className="stat-value">{stats.totalCarbs}g</div>
+              <div className="stat-value macro-display">
+                {formatApproximateMacro(stats.totalCarbs)}g
+              </div>
               <div className="stat-label">Carbs</div>
             </div>
             <div className="stat-card">
-              <div className="stat-value">{stats.totalFat}g</div>
+              <div className="stat-value macro-display">
+                {formatApproximateMacro(stats.totalFat)}g
+              </div>
               <div className="stat-label">Fat</div>
             </div>
           </div>

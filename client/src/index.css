@@ -1,4 +1,5 @@
 @import url("https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;700&family=Inter:wght@400;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Jersey+10&family=Press+Start+2P&display=swap");
 
 * {
   margin: 0;
@@ -522,6 +523,17 @@ h4,
   overflow-x: hidden;
   box-sizing: border-box;
   /* Slide animation will be handled by transform in JS if needed */
+}
+
+.macro-display {
+  font-family: "Jersey 10", "Press Start 2P", monospace !important;
+  letter-spacing: 0.5px;
+}
+
+/* Override the general stat-value rule for macro displays */
+.stat-value.macro-display,
+.macro-display.stat-value {
+  font-family: "Jersey 10", "Press Start 2P", monospace !important;
 }
 
 .tab-indicator {
