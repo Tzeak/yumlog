@@ -82,6 +82,7 @@ function AppContent() {
   const [ingredientEditText, setIngredientEditText] = useState("");
   const [isReanalyzing, setIsReanalyzing] = useState(false);
   const [hasUnanalyzedChanges, setHasUnanalyzedChanges] = useState(false);
+  const [isSavingMeal, setIsSavingMeal] = useState(false);
 
   // State for success message
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
@@ -491,7 +492,11 @@ function AppContent() {
   const saveMealWithModifications = async () => {
     if (!analysis || editableIngredients.length === 0) return;
 
+    // Prevent multiple saves
+    if (isSavingMeal) return;
+
     try {
+      setIsSavingMeal(true);
       logUserAction({ phone, action: "clicked Save Meal" });
       const totals = getUpdatedTotals();
 
@@ -570,6 +575,8 @@ function AppContent() {
         action: "saveMeal error",
         status: error?.response?.status || 500,
       });
+    } finally {
+      setIsSavingMeal(false);
     }
   };
 
@@ -2074,18 +2081,28 @@ function AppContent() {
               </div>
               <button
                 onClick={saveMealWithModifications}
-                disabled={hasUnanalyzedChanges}
+                disabled={hasUnanalyzedChanges || isSavingMeal}
                 className="btn btn-primary"
                 style={{
                   padding: "12px 24px",
                   fontSize: "16px",
-                  background: hasUnanalyzedChanges ? "#6c757d" : "#28a745",
+                  background:
+                    hasUnanalyzedChanges || isSavingMeal
+                      ? "#6c757d"
+                      : "#28a745",
                   border: "none",
-                  opacity: hasUnanalyzedChanges ? 0.6 : 1,
-                  cursor: hasUnanalyzedChanges ? "not-allowed" : "pointer",
+                  opacity: hasUnanalyzedChanges || isSavingMeal ? 0.6 : 1,
+                  cursor:
+                    hasUnanalyzedChanges || isSavingMeal
+                      ? "not-allowed"
+                      : "pointer",
                 }}
               >
-                {hasUnanalyzedChanges ? "Save (Disabled)" : "Save Meal"}
+                {hasUnanalyzedChanges
+                  ? "Save (Disabled)"
+                  : isSavingMeal
+                  ? "Saving..."
+                  : "Save Meal"}
               </button>
             </div>
           </div>
