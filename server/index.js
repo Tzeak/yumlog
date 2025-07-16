@@ -10,6 +10,7 @@ const {
   analyzeTextDescription,
   analyzeGoalProgress,
   analyzeTodayRecommendation,
+  generateGoalGuidelines,
 } = require("./services/openai");
 const {
   initDatabase,
@@ -18,6 +19,11 @@ const {
   deleteMeal,
   createOrUpdateUser,
   getUserById,
+  createGoal,
+  getGoals,
+  getGoal,
+  updateGoal,
+  deleteGoal,
 } = require("./services/database");
 
 const app = express();
@@ -452,16 +458,22 @@ app.post("/api/analyze-goal", authenticateUser, async (req, res) => {
   try {
     console.log("🎯 Starting goal analysis request...");
 
-    const { goal, meals } = req.body;
+    const { goalId, meals } = req.body;
 
-    if (!goal || !meals || !Array.isArray(meals)) {
-      console.log("❌ Invalid goal or meals data provided");
+    if (!goalId || !meals || !Array.isArray(meals)) {
+      console.log("❌ Invalid goal ID or meals data provided");
       return res
         .status(400)
-        .json({ error: "Invalid goal or meals data provided" });
+        .json({ error: "Invalid goal ID or meals data provided" });
     }
 
-    console.log(`🎯 Analyzing ${meals.length} meals for ${goal} goal`);
+    // Get the goal from database
+    const goal = await getGoal(goalId, req.user.id);
+    if (!goal) {
+      return res.status(404).json({ error: "Goal not found" });
+    }
+
+    console.log(`🎯 Analyzing ${meals.length} meals for goal: ${goal.name}`);
 
     // Check if OpenAI API key is configured
     if (
@@ -486,14 +498,11 @@ app.post("/api/analyze-goal", authenticateUser, async (req, res) => {
       sugar: meal.analysis.total_sugar || 0,
       foods: meal.analysis.foods || [],
       note: meal.note || "",
+      meal_title: meal.analysis.meal_title || null,
     }));
 
     // Call the consolidated goal analysis function
-    const result = await analyzeGoalProgress(
-      goal,
-      mealData,
-      req.body.guidelines
-    );
+    const result = await analyzeGoalProgress(goal, mealData);
 
     res.json({
       success: true,
@@ -513,16 +522,22 @@ app.post("/api/analyze-today", authenticateUser, async (req, res) => {
   try {
     console.log("📅 Starting today's recommendation request...");
 
-    const { goal, meals } = req.body;
+    const { goalId, meals } = req.body;
 
-    if (!goal || !meals || !Array.isArray(meals)) {
-      console.log("❌ Invalid goal or meals data provided");
+    if (!goalId || !meals || !Array.isArray(meals)) {
+      console.log("❌ Invalid goal ID or meals data provided");
       return res
         .status(400)
-        .json({ error: "Invalid goal or meals data provided" });
+        .json({ error: "Invalid goal ID or meals data provided" });
     }
 
-    console.log(`📅 Analyzing today's meals for ${goal} goal`);
+    // Get the goal from database
+    const goal = await getGoal(goalId, req.user.id);
+    if (!goal) {
+      return res.status(404).json({ error: "Goal not found" });
+    }
+
+    console.log(`📅 Analyzing today's meals for goal: ${goal.name}`);
 
     // Check if OpenAI API key is configured
     if (
@@ -547,14 +562,11 @@ app.post("/api/analyze-today", authenticateUser, async (req, res) => {
       sugar: meal.analysis.total_sugar || 0,
       foods: meal.analysis.foods || [],
       note: meal.note || "",
+      meal_title: meal.analysis.meal_title || null,
     }));
 
     // Call the consolidated today's recommendation function
-    const result = await analyzeTodayRecommendation(
-      goal,
-      mealData,
-      req.body.guidelines
-    );
+    const result = await analyzeTodayRecommendation(goal, mealData);
 
     res.json({
       success: true,
@@ -589,6 +601,128 @@ app.delete("/api/meals/:id", authenticateUser, async (req, res) => {
   } catch (error) {
     console.error("Error deleting meal:", error);
     res.status(500).json({ error: "Failed to delete meal" });
+  }
+});
+
+// Goal management endpoints
+app.post("/api/generate-goal", authenticateUser, async (req, res) => {
+  try {
+    const { goalDescription } = req.body;
+
+    if (!goalDescription || !goalDescription.trim()) {
+      return res.status(400).json({ error: "Goal description is required" });
+    }
+
+    // Check if OpenAI API key is configured
+    if (
+      !process.env.OPENAI_API_KEY ||
+      process.env.OPENAI_API_KEY === "your_openai_api_key_here"
+    ) {
+      console.log("❌ OpenAI API key not configured");
+      return res.status(500).json({
+        error:
+          "OpenAI API key not configured. Please add your API key to the .env file.",
+      });
+    }
+
+    console.log("🎯 Generating goal guidelines for:", goalDescription);
+    const guidelines = await generateGoalGuidelines(goalDescription.trim());
+
+    res.json({
+      success: true,
+      goal: guidelines,
+    });
+  } catch (error) {
+    console.error("❌ Error generating goal guidelines:", error);
+    res.status(500).json({
+      error: "Failed to generate goal guidelines",
+      details: error.message,
+    });
+  }
+});
+
+app.post("/api/goals", authenticateUser, async (req, res) => {
+  try {
+    const { name, description, guidelines, evaluationCriteria } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: "Goal name is required" });
+    }
+
+    const goalId = await createGoal({
+      userId: req.user.id,
+      name: name.trim(),
+      description: description?.trim(),
+      guidelines: guidelines?.trim(),
+      evaluationCriteria: evaluationCriteria?.trim(),
+    });
+
+    res.json({ success: true, goalId });
+  } catch (error) {
+    console.error("Error creating goal:", error);
+    res.status(500).json({ error: "Failed to create goal" });
+  }
+});
+
+app.get("/api/goals", authenticateUser, async (req, res) => {
+  try {
+    const goals = await getGoals(req.user.id);
+    res.json({ goals });
+  } catch (error) {
+    console.error("Error fetching goals:", error);
+    res.status(500).json({ error: "Failed to fetch goals" });
+  }
+});
+
+app.get("/api/goals/:id", authenticateUser, async (req, res) => {
+  try {
+    const goalId = req.params.id;
+    const goal = await getGoal(goalId, req.user.id);
+
+    if (!goal) {
+      return res.status(404).json({ error: "Goal not found" });
+    }
+
+    res.json({ goal });
+  } catch (error) {
+    console.error("Error fetching goal:", error);
+    res.status(500).json({ error: "Failed to fetch goal" });
+  }
+});
+
+app.put("/api/goals/:id", authenticateUser, async (req, res) => {
+  try {
+    const goalId = req.params.id;
+    const { name, description, guidelines, evaluationCriteria, isActive } =
+      req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: "Goal name is required" });
+    }
+
+    await updateGoal(goalId, req.user.id, {
+      name: name.trim(),
+      description: description?.trim(),
+      guidelines: guidelines?.trim(),
+      evaluationCriteria: evaluationCriteria?.trim(),
+      isActive: isActive !== false, // Default to true if not specified
+    });
+
+    res.json({ success: true, message: "Goal updated successfully" });
+  } catch (error) {
+    console.error("Error updating goal:", error);
+    res.status(500).json({ error: "Failed to update goal" });
+  }
+});
+
+app.delete("/api/goals/:id", authenticateUser, async (req, res) => {
+  try {
+    const goalId = req.params.id;
+    await deleteGoal(goalId, req.user.id);
+    res.json({ success: true, message: "Goal deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting goal:", error);
+    res.status(500).json({ error: "Failed to delete goal" });
   }
 });
 

@@ -528,9 +528,9 @@ Be as accurate as possible with portion sizes and nutritional values. If you're 
   }
 }
 
-async function analyzeGoalProgress(goal, mealData, guidelines = null) {
+async function analyzeGoalProgress(goal, mealData) {
   try {
-    console.log("🎯 Starting goal analysis for:", goal);
+    console.log("🎯 Starting goal analysis for:", goal.name);
 
     // Get recent meals (last 7 days)
     const sevenDaysAgo = new Date();
@@ -581,69 +581,10 @@ async function analyzeGoalProgress(goal, mealData, guidelines = null) {
     const fatPercent = totalMacros > 0 ? (totalFat / totalMacros) * 100 : 0;
 
     // Create analysis prompt based on goal
-    let analysisPrompt = "";
-    let goalGuidelines = "";
+    const goalGuidelines = goal.guidelines || `Goal: ${goal.name}`;
+    const goalDescription = goal.description || goal.name;
 
-    if (goal === "keto") {
-      goalGuidelines =
-        guidelines ||
-        `
-Keto Diet Guidelines:
-- Target macros: 70-80% fat, 20-25% protein, 5-10% carbs
-- Daily carb limit: 20-50g net carbs
-- Focus on high-fat foods, moderate protein, very low carbs
-      `;
-
-      analysisPrompt = `Analyze this user's recent meals for keto diet compliance:
-
-Recent meals (${recentMeals.length} meals in last 7 days):
-- Average calories: ${avgCalories.toFixed(0)}
-- Average protein: ${avgProtein.toFixed(1)}g
-- Average carbs: ${avgCarbs.toFixed(1)}g
-- Average fat: ${avgFat.toFixed(1)}g
-- Macro breakdown: ${proteinPercent.toFixed(
-        1
-      )}% protein, ${carbsPercent.toFixed(1)}% carbs, ${fatPercent.toFixed(
-        1
-      )}% fat
-
-Recent meal details:
-${recentMeals
-  .map(
-    (meal) =>
-      `- ${new Date(meal.date).toLocaleDateString()}: ${meal.calories.toFixed(
-        0
-      )} cal, ${meal.protein.toFixed(1)}g protein, ${meal.carbs.toFixed(
-        1
-      )}g carbs, ${meal.fat.toFixed(1)}g fat${
-        meal.note ? ` (Note: ${meal.note})` : ""
-      }`
-  )
-  .join("\n")}
-
-${goalGuidelines}
-
-Provide a casual, conversational assessment that includes:
-
-- Overall trend (improving, declining, or maintaining)
-- 2-3 specific meals that were good keto choices and 2-3 meals that need improvement (reference the meal dates above)
-- 3-4 actionable steps they can take to improve keto compliance
-- Positive reinforcement for what they're doing well
-
-Write like you're talking to a friend. Be specific about which meals were good/bad and why.`;
-    } else if (goal === "antiInflammatory") {
-      goalGuidelines =
-        guidelines ||
-        `
-Anti-Inflammatory Diet Guidelines:
-- Focus on whole, unprocessed foods
-- Include: fatty fish, berries, leafy greens, nuts, olive oil
-- Avoid: processed meats, refined carbs, added sugars, trans fats
-- Limit: alcohol, fried foods, excessive red meat
-- Emphasize: omega-3 rich foods, antioxidants, fiber
-      `;
-
-      analysisPrompt = `Analyze this user's recent meals for anti-inflammatory diet compliance:
+    const analysisPrompt = `Analyze this user's recent meals for ${goalDescription} compliance:
 
 Recent meals (${recentMeals.length} meals in last 7 days):
 - Average calories: ${avgCalories.toFixed(0)}
@@ -652,6 +593,11 @@ Recent meals (${recentMeals.length} meals in last 7 days):
 - Average fat: ${avgFat.toFixed(1)}g
 - Average fiber: ${totalFiber / recentMeals.length || 0}g
 - Average sugar: ${totalSugar / recentMeals.length || 0}g
+- Macro breakdown: ${proteinPercent.toFixed(
+      1
+    )}% protein, ${carbsPercent.toFixed(1)}% carbs, ${fatPercent.toFixed(
+      1
+    )}% fat
 
 Recent meal details:
 ${recentMeals
@@ -672,12 +618,11 @@ ${goalGuidelines}
 Provide a casual, conversational assessment that includes:
 
 - Overall trend (improving, declining, or maintaining)
-- 2-3 specific meals that were good anti-inflammatory choices and 2-3 meals that need improvement (reference the meal dates above)
-- 3-4 actionable steps they can take to reduce inflammation
+- 2-3 specific meals that were good choices and 2-3 meals that need improvement (reference the meal dates above)
+- 3-4 actionable steps they can take to improve compliance
 - Positive reinforcement for what they're doing well
 
 Write like you're talking to a friend. Be specific about which meals were good/bad and why.`;
-    }
 
     // Call OpenAI for goal analysis
     console.log("🤖 Calling OpenAI for goal analysis...");
@@ -687,7 +632,7 @@ Write like you're talking to a friend. Be specific about which meals were good/b
         {
           role: "system",
           content:
-            "You are a nutrition expert and a friendly dog. Analyze meal data for diet goal compliance and provide encouraging, actionable advice.",
+            "You are a nutrition expert and a dog. Analyze meal data for diet goal compliance and provide encouraging, actionable advice.",
         },
         {
           role: "user",
@@ -774,9 +719,128 @@ Write like you're talking to a friend. Be specific about which meals were good/b
   }
 }
 
-async function analyzeTodayRecommendation(goal, mealData, guidelines = null) {
+async function generateGoalGuidelines(goalDescription) {
   try {
-    console.log("📅 Starting today's recommendation analysis for:", goal);
+    console.log("🎯 Generating goal guidelines for:", goalDescription);
+
+    const prompt = `Create comprehensive dietary guidelines for the following goal: "${goalDescription}"
+
+Generate a detailed set of guidelines that includes:
+1. General dietary principles and rules
+2. Recommended macro ratios (if applicable)
+3. Foods to include and avoid
+4. Meal timing and frequency recommendations
+5. Specific nutritional targets
+6. Tips for success
+
+Make the guidelines practical, actionable, and easy to follow. Write in a clear, friendly tone.`;
+
+    console.log("🤖 Calling OpenAI for goal guidelines generation...");
+    const response = await openai.responses.create({
+      model: "gpt-4o-2024-08-06",
+      input: [
+        {
+          role: "system",
+          content:
+            "You are a nutrition expert and a friendly dog. Create comprehensive, practical dietary guidelines for various health and fitness goals.",
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: prompt,
+            },
+          ],
+        },
+      ],
+      max_output_tokens: 800,
+      text: {
+        format: {
+          type: "json_schema",
+          name: "goal_guidelines",
+          schema: {
+            type: "object",
+            properties: {
+              name: {
+                type: "string",
+                description: "A concise name for the goal",
+              },
+              description: {
+                type: "string",
+                description: "A brief description of the goal",
+              },
+              guidelines: {
+                type: "string",
+                description: "Comprehensive dietary guidelines and rules",
+              },
+              evaluationCriteria: {
+                type: "string",
+                description:
+                  "Specific criteria for evaluating meal compliance with this goal",
+              },
+            },
+            required: [
+              "name",
+              "description",
+              "guidelines",
+              "evaluationCriteria",
+            ],
+            additionalProperties: false,
+          },
+          strict: true,
+        },
+      },
+    });
+
+    console.log("✅ OpenAI goal guidelines generation completed");
+
+    if (
+      response.status === "incomplete" &&
+      response.incomplete_details.reason === "max_output_tokens"
+    ) {
+      throw new Error("Incomplete response - max tokens exceeded");
+    }
+
+    const goal_guidelines = response.output[0].content[0];
+
+    if (goal_guidelines.type === "refusal") {
+      console.error("❌ OpenAI refused the request:", goal_guidelines.refusal);
+      throw new Error(`OpenAI refused the request: ${goal_guidelines.refusal}`);
+    } else if (goal_guidelines.type === "output_text") {
+      console.log("✅ Structured goal guidelines received");
+
+      try {
+        const guidelines = JSON.parse(goal_guidelines.text);
+        console.log("✅ Goal guidelines JSON parsed successfully");
+
+        return {
+          name: guidelines.name,
+          description: guidelines.description,
+          guidelines: guidelines.guidelines,
+          evaluationCriteria: guidelines.evaluationCriteria,
+        };
+      } catch (parseError) {
+        console.error(
+          "❌ Failed to parse goal guidelines as JSON:",
+          parseError
+        );
+        throw new Error(
+          `Failed to parse goal guidelines: ${parseError.message}`
+        );
+      }
+    } else {
+      throw new Error("Unexpected response type from OpenAI");
+    }
+  } catch (error) {
+    console.error("❌ Error generating goal guidelines:", error);
+    throw new Error(`Failed to generate goal guidelines: ${error.message}`);
+  }
+}
+
+async function analyzeTodayRecommendation(goal, mealData) {
+  try {
+    console.log("📅 Starting today's recommendation analysis for:", goal.name);
 
     // Get today's meals
     const today = new Date();
@@ -820,20 +884,10 @@ async function analyzeTodayRecommendation(goal, mealData, guidelines = null) {
     });
 
     // Create today-specific analysis prompt
-    let analysisPrompt = "";
-    let goalGuidelines = "";
+    const goalGuidelines = goal.guidelines || `Goal: ${goal.name}`;
+    const goalDescription = goal.description || goal.name;
 
-    if (goal === "keto") {
-      goalGuidelines =
-        guidelines ||
-        `
-Keto Diet Guidelines:
-- Target macros: 70-80% fat, 20-25% protein, 5-10% carbs
-- Daily carb limit: 20-50g net carbs
-- Focus on high-fat foods, moderate protein, very low carbs
-      `;
-
-      analysisPrompt = `Analyze this user's meals for TODAY and provide specific advice for the rest of the day:
+    const analysisPrompt = `Analyze this user's meals for TODAY and provide specific advice for ${goalDescription}:
 
 Today's meals so far (${todayMeals.length} meals):
 - Total calories: ${totalCalories.toFixed(0)}
@@ -862,53 +916,6 @@ ${goalGuidelines}
 Provide a casual, conversational recommendation that includes how they're doing so far today, 2-3 specific foods/meals they should eat for the rest of today, what they should avoid for the rest of today, and why these suggestions will help them stay on track.
 
 Write like you're talking to a friend. Keep it short and concise. Don't use markdown formatting.`;
-    } else if (goal === "antiInflammatory") {
-      goalGuidelines =
-        guidelines ||
-        `
-Anti-Inflammatory Diet Guidelines:
-- Focus on whole, unprocessed foods
-- Include: fatty fish, berries, leafy greens, nuts, olive oil
-- Avoid: processed meats, refined carbs, added sugars, trans fats
-- Limit: alcohol, fried foods, excessive red meat
-- Emphasize: omega-3 rich foods, antioxidants, fiber
-      `;
-
-      analysisPrompt = `Analyze this user's meals for TODAY and provide specific advice for reducing inflammation:
-
-Today's meals so far (${todayMeals.length} meals):
-- Total calories: ${totalCalories.toFixed(0)}
-- Total protein: ${totalProtein.toFixed(1)}g
-- Total carbs: ${totalCarbs.toFixed(1)}g
-- Total fat: ${totalFat.toFixed(1)}g
-- Total fiber: ${totalFiber.toFixed(1)}g
-- Total sugar: ${totalSugar.toFixed(1)}g
-
-Today's meal details:
-${todayMeals
-  .map(
-    (meal) =>
-      `- ${new Date(meal.date).toLocaleTimeString()}: ${meal.calories.toFixed(
-        0
-      )} cal, ${meal.protein.toFixed(1)}g protein, ${meal.carbs.toFixed(
-        1
-      )}g carbs, ${meal.fat.toFixed(1)}g fat${
-        meal.note ? ` (Note: ${meal.note})` : ""
-      }`
-  )
-  .join("\n")}
-
-${goalGuidelines}
-
-Provide a casual, conversational recommendation that includes:
-
-- How they're doing so far today for reducing inflammation
-- 2-3 specific anti-inflammatory foods/meals they should eat for the rest of today 
-- What inflammatory foods they should avoid for the rest of today
-- Why these suggestions will help reduce inflammation
-
-Write like you're talking to a friend. Keep it short and concise. Don't use markdown formatting.`;
-    }
 
     // Call OpenAI for today's recommendation
     console.log("🤖 Calling OpenAI for today's recommendation...");
@@ -1016,4 +1023,5 @@ module.exports = {
   normalizeServingSizes,
   analyzeGoalProgress,
   analyzeTodayRecommendation,
+  generateGoalGuidelines,
 };

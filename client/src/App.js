@@ -27,6 +27,7 @@ import {
 } from "@clerk/clerk-react";
 import Yumdog from "./Yumdog";
 import GoldiePortrait from "./GoldiePortrait";
+import GoalManager from "./GoalManager";
 import { useSwipeable } from "react-swipeable";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -90,49 +91,13 @@ function AppContent() {
   // New state for goals
   const [goalAnalysis, setGoalAnalysis] = useState(null);
   const [isLoadingGoalProgress, setIsLoadingGoalProgress] = useState(false);
-  const [selectedGoal, setSelectedGoal] = useState("keto");
+  const [selectedGoalId, setSelectedGoalId] = useState(null);
+  const [selectedGoal, setSelectedGoal] = useState(null);
   const [goalStats, setGoalStats] = useState(null);
   const [relevantMeals, setRelevantMeals] = useState([]);
   const [todayRecommendation, setTodayRecommendation] = useState(null);
   const [isLoadingTodayRecommendation, setIsLoadingTodayRecommendation] =
     useState(false);
-  const [goalGuidelines, setGoalGuidelines] = useState({
-    keto: {
-      name: "Keto Diet",
-      description: "Low-carb, high-fat diet for ketosis",
-      guidelines: `Keto Diet Guidelines:
-- Target macros: 70-80% fat, 20-25% protein, 5-10% carbs
-- Daily carb limit: 20-50g net carbs
-- Focus on high-fat foods, moderate protein, very low carbs
-- Avoid: grains, sugar, most fruits, starchy vegetables
-- Include: meat, fish, eggs, dairy, nuts, seeds, low-carb vegetables`,
-      inflammatoryFoods: [
-        "grains",
-        "sugar",
-        "processed foods",
-        "refined carbs",
-      ],
-    },
-    antiInflammatory: {
-      name: "Anti-Inflammatory",
-      description: "Reduce inflammation through diet",
-      guidelines: `Anti-Inflammatory Diet Guidelines:
-- Focus on whole, unprocessed foods
-- Include: fatty fish, berries, leafy greens, nuts, olive oil
-- Avoid: processed meats, refined carbs, added sugars, trans fats
-- Limit: alcohol, fried foods, excessive red meat
-- Emphasize: omega-3 rich foods, antioxidants, fiber`,
-      inflammatoryFoods: [
-        "processed meats",
-        "refined carbs",
-        "added sugars",
-        "trans fats",
-        "fried foods",
-        "excessive alcohol",
-      ],
-    },
-  });
-  const [editingGuidelines, setEditingGuidelines] = useState(false);
   const [analysisCache, setAnalysisCache] = useState({});
   const [todayRecommendationCache, setTodayRecommendationCache] = useState({});
 
@@ -480,6 +445,49 @@ function AppContent() {
     return `${originalQuantity} × ${servingMultiplier.toFixed(1)}`;
   };
 
+  const generateMealTitle = (foods, note) => {
+    if (!foods || foods.length === 0) {
+      return note || "Meal";
+    }
+
+    // If there's a user note, use it as the primary title
+    if (note && note.trim()) {
+      return note.trim();
+    }
+
+    // Generate title from food items
+    const foodNames = foods.map((food) => food.name).filter(Boolean);
+
+    if (foodNames.length === 0) {
+      return "Meal";
+    }
+
+    if (foodNames.length === 1) {
+      return foodNames[0];
+    }
+
+    if (foodNames.length === 2) {
+      return `${foodNames[0]} & ${foodNames[1]}`;
+    }
+
+    // For 3 or more items, use the first 2 and add "& more"
+    return `${foodNames[0]}, ${foodNames[1]} & more`;
+  };
+
+  const getGoalComplianceLabel = (score) => {
+    if (score >= 90) return "Exceeds Goals";
+    if (score >= 75) return "Meets Goals";
+    if (score >= 50) return "Partially Meets Goals";
+    return "Does Not Meet Goals";
+  };
+
+  const getGoalComplianceColor = (score) => {
+    if (score >= 90) return "#28a745"; // Green
+    if (score >= 75) return "#17a2b8"; // Blue
+    if (score >= 50) return "#ffc107"; // Yellow
+    return "#dc3545"; // Red
+  };
+
   const saveMealWithModifications = async () => {
     if (!analysis || editableIngredients.length === 0) return;
 
@@ -497,6 +505,10 @@ function AppContent() {
         total_fat: totals.fat,
         total_fiber: totals.fiber,
         total_sugar: totals.sugar,
+        meal_title: generateMealTitle(
+          editableIngredients,
+          mealDescription.trim()
+        ),
       };
 
       let response;
@@ -597,12 +609,12 @@ function AppContent() {
 
   // New function to analyze goals
   const analyzeGoalProgress = async (forceRefresh = false) => {
-    if (!meals.length) return;
+    if (!meals.length || !selectedGoalId) return;
 
     const cacheKey = generateGoalAnalysisCacheKey(
-      selectedGoal,
+      selectedGoalId,
       meals,
-      goalGuidelines[selectedGoal]?.guidelines
+      selectedGoal?.guidelines
     );
 
     // Check if we have cached results (only if not forcing refresh)
@@ -633,9 +645,8 @@ function AppContent() {
       logUserAction({ phone, action: "analyzeGoalProgress" });
 
       const response = await api.post("/analyze-goal", {
-        goal: selectedGoal,
+        goalId: selectedGoalId,
         meals: meals,
-        guidelines: goalGuidelines[selectedGoal]?.guidelines,
       });
 
       console.log("🎯 Goal analysis received:", response.data);
@@ -669,12 +680,12 @@ function AppContent() {
 
   // New function to analyze today's meals specifically
   const analyzeTodayRecommendation = async (forceRefresh = false) => {
-    if (!meals.length) return;
+    if (!meals.length || !selectedGoalId) return;
 
     const cacheKey = generateTodayRecommendationCacheKey(
-      selectedGoal,
+      selectedGoalId,
       meals,
-      goalGuidelines[selectedGoal]?.guidelines
+      selectedGoal?.guidelines
     );
 
     // Check if we have cached results (only if not forcing refresh)
@@ -703,9 +714,8 @@ function AppContent() {
       logUserAction({ phone, action: "analyzeTodayRecommendation" });
 
       const response = await api.post("/analyze-today", {
-        goal: selectedGoal,
+        goalId: selectedGoalId,
         meals: meals,
-        guidelines: goalGuidelines[selectedGoal]?.guidelines,
       });
 
       console.log("📅 Today's recommendation received:", response.data);
@@ -733,8 +743,10 @@ function AppContent() {
     }
   };
 
-  // Function to evaluate if a meal meets keto goals
+  // Function to evaluate if a meal meets the selected goal
   const evaluateMealForGoal = (meal) => {
+    if (!selectedGoal) return { compliant: false, score: 0, details: {} };
+
     // Handle both original meal structure and processed meal structure
     let protein, carbs, fat;
 
@@ -750,59 +762,56 @@ function AppContent() {
       fat = meal.fat || 0;
     }
 
-    if (selectedGoal === "keto") {
-      // Keto criteria: low carbs (under 20g), moderate protein, high fat
-      const isLowCarb = carbs <= 20;
-      const isModerateProtein = protein >= 10 && protein <= 50;
+    // Calculate macro percentages
+    const totalMacros = protein + carbs + fat;
+    const proteinPercent = totalMacros > 0 ? (protein / totalMacros) * 100 : 0;
+    const carbsPercent = totalMacros > 0 ? (carbs / totalMacros) * 100 : 0;
+    const fatPercent = totalMacros > 0 ? (fat / totalMacros) * 100 : 0;
 
-      // Calculate macro percentages
-      const totalMacros = protein + carbs + fat;
-      const fatPercentage = totalMacros > 0 ? (fat / totalMacros) * 100 : 0;
-      const carbPercentage = totalMacros > 0 ? (carbs / totalMacros) * 100 : 0;
+    // For now, use a simplified scoring system based on macro balance
+    // In the future, this could be enhanced to use the goal's evaluationCriteria
+    let score = 50; // Base score
+    let isCompliant = false;
 
-      const isHighFatPercentage = fatPercentage >= 60;
-      const isLowCarbPercentage = carbPercentage <= 10;
-
-      // Overall keto compliance
-      const isKetoCompliant =
-        isLowCarb && isHighFatPercentage && isLowCarbPercentage;
-
-      return {
-        compliant: isKetoCompliant,
-        score: isKetoCompliant
-          ? 100
-          : isLowCarb && isHighFatPercentage
-          ? 75
-          : isLowCarb
-          ? 50
-          : 25,
-        details: {
-          carbs: { value: carbs, good: isLowCarb },
-          fat: { value: fat, good: isHighFatPercentage },
-          protein: { value: protein, good: isModerateProtein },
-        },
-      };
-    } else if (selectedGoal === "antiInflammatory") {
-      // For anti-inflammatory, we'll rely on OpenAI analysis
-      // This is a placeholder until we get the analysis from backend
-      return { compliant: false, score: 0, details: {} };
-    }
-
-    return { compliant: false, score: 0, details: {} };
-  };
-
-  // Load guidelines from localStorage on component mount
-  useEffect(() => {
-    const savedGuidelines = localStorage.getItem("yumlog_goal_guidelines");
-    if (savedGuidelines) {
-      try {
-        const parsed = JSON.parse(savedGuidelines);
-        setGoalGuidelines((prev) => ({ ...prev, ...parsed }));
-      } catch (error) {
-        console.error("Error loading guidelines:", error);
+    // Simple scoring based on macro balance (moderate in all macros)
+    if (totalMacros > 0) {
+      if (
+        proteinPercent >= 15 &&
+        proteinPercent <= 35 &&
+        carbsPercent >= 30 &&
+        carbsPercent <= 60 &&
+        fatPercent >= 20 &&
+        fatPercent <= 50
+      ) {
+        score = 80;
+        isCompliant = true;
+      } else if (
+        proteinPercent >= 10 &&
+        proteinPercent <= 40 &&
+        carbsPercent >= 25 &&
+        carbsPercent <= 65 &&
+        fatPercent >= 15 &&
+        fatPercent <= 55
+      ) {
+        score = 60;
+      } else {
+        score = 30;
       }
     }
 
+    return {
+      compliant: isCompliant,
+      score: score,
+      details: {
+        carbs: { value: carbs, good: carbs >= 10 && carbs <= 100 },
+        fat: { value: fat, good: fat >= 5 && fat <= 50 },
+        protein: { value: protein, good: protein >= 5 && protein <= 40 },
+      },
+    };
+  };
+
+  // Load cache from localStorage on component mount
+  useEffect(() => {
     // Load cache from localStorage
     const savedAnalysisCache = localStorage.getItem("yumlog_analysis_cache");
     if (savedAnalysisCache) {
@@ -825,36 +834,8 @@ function AppContent() {
     }
   }, []);
 
-  // Save guidelines to localStorage
-  const saveGuidelines = (goalType, newGuidelines) => {
-    const updated = { ...goalGuidelines, [goalType]: newGuidelines };
-    setGoalGuidelines(updated);
-    localStorage.setItem("yumlog_goal_guidelines", JSON.stringify(updated));
-
-    // Clear cache for this goal since guidelines changed
-    const goalCacheKeys = Object.keys(analysisCache).filter((key) =>
-      key.startsWith(goalType)
-    );
-    const todayCacheKeys = Object.keys(todayRecommendationCache).filter((key) =>
-      key.startsWith(goalType)
-    );
-
-    const newAnalysisCache = { ...analysisCache };
-    goalCacheKeys.forEach((key) => delete newAnalysisCache[key]);
-    setAnalysisCache(newAnalysisCache);
-    localStorage.setItem(
-      "yumlog_analysis_cache",
-      JSON.stringify(newAnalysisCache)
-    );
-
-    const newTodayCache = { ...todayRecommendationCache };
-    todayCacheKeys.forEach((key) => delete newTodayCache[key]);
-    setTodayRecommendationCache(newTodayCache);
-    localStorage.setItem("yumlog_today_cache", JSON.stringify(newTodayCache));
-  };
-
   // Generate cache key for goal analysis
-  const generateGoalAnalysisCacheKey = (goal, meals, guidelines) => {
+  const generateGoalAnalysisCacheKey = (goalId, meals, guidelines) => {
     const mealsHash = meals
       .map((meal) => ({
         id: meal.id,
@@ -866,11 +847,11 @@ function AppContent() {
       }))
       .sort((a, b) => new Date(a.date) - new Date(b.date));
 
-    return `${goal}_${JSON.stringify(mealsHash)}_${guidelines || ""}`;
+    return `${goalId}_${JSON.stringify(mealsHash)}_${guidelines || ""}`;
   };
 
   // Generate cache key for today's recommendation
-  const generateTodayRecommendationCacheKey = (goal, meals, guidelines) => {
+  const generateTodayRecommendationCacheKey = (goalId, meals, guidelines) => {
     const today = new Date();
     const todayStart = new Date(
       today.getFullYear(),
@@ -898,12 +879,12 @@ function AppContent() {
       }))
       .sort((a, b) => new Date(a.date) - new Date(b.date));
 
-    return `${goal}_today_${JSON.stringify(todayMeals)}_${guidelines || ""}`;
+    return `${goalId}_today_${JSON.stringify(todayMeals)}_${guidelines || ""}`;
   };
 
   // Load goal analysis when goals tab is active and meals are available
   useEffect(() => {
-    if (activeTab === "goals" && meals.length > 0) {
+    if (activeTab === "goals" && meals.length > 0 && selectedGoalId) {
       if (!goalAnalysis) {
         analyzeGoalProgress(false); // Use cache on initial load
       }
@@ -911,11 +892,11 @@ function AppContent() {
         analyzeTodayRecommendation(false); // Use cache on initial load
       }
     }
-  }, [activeTab, meals]);
+  }, [activeTab, meals, selectedGoalId]);
 
   // Reassess when goal changes
   useEffect(() => {
-    if (activeTab === "goals" && meals.length > 0) {
+    if (activeTab === "goals" && meals.length > 0 && selectedGoalId) {
       // Clear previous analysis when goal changes
       setGoalAnalysis(null);
       setTodayRecommendation(null);
@@ -926,7 +907,7 @@ function AppContent() {
       analyzeGoalProgress(false);
       analyzeTodayRecommendation(false);
     }
-  }, [selectedGoal]);
+  }, [selectedGoalId]);
 
   const reanalyzeWithIngredients = async () => {
     if (
@@ -2174,7 +2155,9 @@ function AppContent() {
                     )}
                     <div className="meal-info">
                       <div className="meal-title">
-                        {meal.analysis.meal_type || "Meal"}
+                        {meal.analysis.meal_title ||
+                          meal.analysis.meal_type ||
+                          generateMealTitle(meal.analysis.foods, meal.note)}
                         {!meal.imagePath && (
                           <span
                             style={{
@@ -2381,52 +2364,37 @@ function AppContent() {
     const stats = getDailyStats();
     const macroData = getMacroData();
 
+    const handleGoalSelect = (goalId, goal) => {
+      setSelectedGoalId(goalId);
+      setSelectedGoal(goal);
+    };
+
     return (
       <div className="card">
         <h2 style={{ marginBottom: "20px" }}>🎯 Yum Goals</h2>
 
-        {/* Goal Selection */}
-        <div style={{ marginBottom: "24px" }}>
-          <h3 style={{ marginBottom: "12px", color: "#333" }}>
-            Select Your Goal
-          </h3>
-          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-            <button
-              onClick={() => setSelectedGoal("keto")}
-              style={{
-                padding: "12px 20px",
-                background: selectedGoal === "keto" ? "#667eea" : "#f8f9fa",
-                color: selectedGoal === "keto" ? "white" : "#333",
-                border: "2px solid #667eea",
-                borderRadius: "8px",
-                cursor: "pointer",
-                fontWeight: "500",
-                transition: "all 0.2s ease",
-              }}
-            >
-              🥑 Keto Diet
-            </button>
-            <button
-              onClick={() => setSelectedGoal("antiInflammatory")}
-              style={{
-                padding: "12px 20px",
-                background:
-                  selectedGoal === "antiInflammatory" ? "#667eea" : "#f8f9fa",
-                color: selectedGoal === "antiInflammatory" ? "white" : "#333",
-                border: "2px solid #667eea",
-                borderRadius: "8px",
-                cursor: "pointer",
-                fontWeight: "500",
-                transition: "all 0.2s ease",
-              }}
-            >
-              🌿 Anti-Inflammatory
-            </button>
-          </div>
-        </div>
+        {/* Goal Management */}
+        <GoalManager
+          onGoalSelect={handleGoalSelect}
+          selectedGoalId={selectedGoalId}
+        />
 
         {/* Goal Analysis */}
-        {goalAnalysis && (
+        {!selectedGoalId ? (
+          <div
+            style={{
+              marginBottom: "24px",
+              padding: "20px",
+              background: "#f8f9fa",
+              borderRadius: "12px",
+              textAlign: "center",
+              color: "#6c757d",
+            }}
+          >
+            <Target size={48} style={{ marginBottom: "16px", opacity: 0.5 }} />
+            <p>Select a goal above to see your progress analysis</p>
+          </div>
+        ) : goalAnalysis ? (
           <div
             style={{
               marginBottom: "24px",
@@ -2445,7 +2413,7 @@ function AppContent() {
               }}
             >
               <GoldiePortrait size={32} />
-              Goal Assessment
+              {selectedGoal?.name || "Goal"} Assessment
             </h3>
             <div style={{ marginBottom: "16px" }}>
               <p
@@ -2477,10 +2445,10 @@ function AppContent() {
               {isLoadingGoalProgress ? "Analyzing..." : "Refresh Analysis"}
             </button>
           </div>
-        )}
+        ) : null}
 
         {/* Today's Recommendation */}
-        {todayRecommendation && (
+        {!selectedGoalId ? null : todayRecommendation ? (
           <div
             style={{
               marginBottom: "24px",
@@ -2524,31 +2492,33 @@ function AppContent() {
                 : "Refresh Today's Advice"}
             </button>
           </div>
-        )}
+        ) : null}
 
         {/* Loading State for Today's Recommendation */}
-        {isLoadingTodayRecommendation && !todayRecommendation && (
-          <div
-            style={{
-              marginBottom: "24px",
-              padding: "20px",
-              background: "#f8f9fa",
-              borderRadius: "12px",
-              textAlign: "center",
-            }}
-          >
+        {selectedGoalId &&
+          isLoadingTodayRecommendation &&
+          !todayRecommendation && (
             <div
-              className="spinner"
-              style={{ margin: "0 auto 12px auto" }}
-            ></div>
-            <p style={{ margin: 0, color: "#666" }}>
-              Getting today's recommendation...
-            </p>
-          </div>
-        )}
+              style={{
+                marginBottom: "24px",
+                padding: "20px",
+                background: "#f8f9fa",
+                borderRadius: "12px",
+                textAlign: "center",
+              }}
+            >
+              <div
+                className="spinner"
+                style={{ margin: "0 auto 12px auto" }}
+              ></div>
+              <p style={{ margin: 0, color: "#666" }}>
+                Getting today's recommendation...
+              </p>
+            </div>
+          )}
 
         {/* Analysis Stats */}
-        {goalStats && (
+        {selectedGoalId && goalStats && (
           <div
             style={{
               marginBottom: "24px",
@@ -2593,7 +2563,7 @@ function AppContent() {
         )}
 
         {/* Relevant Meals */}
-        {relevantMeals.length > 0 && (
+        {selectedGoalId && relevantMeals.length > 0 && (
           <div
             style={{
               marginBottom: "24px",
@@ -2643,39 +2613,45 @@ function AppContent() {
                       <div
                         style={{
                           display: "flex",
-                          alignItems: "center",
-                          gap: "8px",
+                          flexDirection: "column",
+                          gap: "4px",
                         }}
                       >
-                        <span style={{ fontWeight: "500", color: "#333" }}>
+                        <span
+                          style={{
+                            fontWeight: "600",
+                            color: "#333",
+                            fontSize: "14px",
+                          }}
+                        >
+                          {meal.meal_title ||
+                            generateMealTitle(meal.foods, meal.note)}
+                        </span>
+                        <span
+                          style={{
+                            fontWeight: "500",
+                            color: "#666",
+                            fontSize: "12px",
+                          }}
+                        >
                           {new Date(meal.date).toLocaleDateString()}
                         </span>
                         <span
                           style={{
-                            padding: "2px 6px",
+                            padding: "4px 8px",
                             borderRadius: "4px",
-                            fontSize: "10px",
+                            fontSize: "11px",
                             fontWeight: "bold",
                             color: "white",
-                            background: getScoreColor(goalEvaluation.score),
+                            background: getGoalComplianceColor(
+                              goalEvaluation.score
+                            ),
+                            display: "inline-block",
+                            width: "fit-content",
                           }}
                         >
-                          {goalEvaluation.score}%
+                          {getGoalComplianceLabel(goalEvaluation.score)}
                         </span>
-                        {goalEvaluation.compliant && (
-                          <span
-                            style={{
-                              padding: "2px 6px",
-                              borderRadius: "4px",
-                              fontSize: "10px",
-                              fontWeight: "bold",
-                              color: "white",
-                              background: "#28a745",
-                            }}
-                          >
-                            ✓ KETO
-                          </span>
-                        )}
                       </div>
                       <span style={{ fontSize: "12px", color: "#666" }}>
                         {meal.calories.toFixed(0)} cal
@@ -2743,7 +2719,7 @@ function AppContent() {
         )}
 
         {/* Loading State */}
-        {isLoadingGoalProgress && !goalAnalysis && (
+        {selectedGoalId && isLoadingGoalProgress && !goalAnalysis && (
           <div
             style={{
               marginBottom: "24px",
@@ -2819,158 +2795,6 @@ function AppContent() {
             </div>
           </div>
         )}
-
-        {/* Editable Guidelines Section */}
-        <div
-          style={{
-            marginTop: "24px",
-            padding: "20px",
-            background: "#f8f9fa",
-            borderRadius: "12px",
-            border: "2px solid #667eea",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: "16px",
-            }}
-          >
-            <h4 style={{ margin: 0, color: "#333" }}>
-              📋 {goalGuidelines[selectedGoal]?.name || selectedGoal} Guidelines
-            </h4>
-            <button
-              onClick={() => setEditingGuidelines(!editingGuidelines)}
-              style={{
-                padding: "6px 12px",
-                background: editingGuidelines ? "#dc3545" : "#667eea",
-                color: "white",
-                border: "none",
-                borderRadius: "6px",
-                cursor: "pointer",
-                fontSize: "12px",
-              }}
-            >
-              {editingGuidelines ? "Cancel" : "Edit"}
-            </button>
-          </div>
-
-          {editingGuidelines ? (
-            <div>
-              <textarea
-                value={goalGuidelines[selectedGoal]?.guidelines || ""}
-                onChange={(e) => {
-                  const updated = {
-                    ...goalGuidelines[selectedGoal],
-                    guidelines: e.target.value,
-                  };
-                  setGoalGuidelines((prev) => ({
-                    ...prev,
-                    [selectedGoal]: updated,
-                  }));
-                }}
-                style={{
-                  width: "100%",
-                  minHeight: "200px",
-                  padding: "12px",
-                  border: "1px solid #ddd",
-                  borderRadius: "6px",
-                  fontSize: "14px",
-                  fontFamily: "monospace",
-                  lineHeight: "1.4",
-                }}
-                placeholder="Enter your guidelines here..."
-              />
-              <div style={{ marginTop: "12px", display: "flex", gap: "8px" }}>
-                <button
-                  onClick={() => {
-                    saveGuidelines(selectedGoal, goalGuidelines[selectedGoal]);
-                    setEditingGuidelines(false);
-                  }}
-                  style={{
-                    padding: "8px 16px",
-                    background: "#28a745",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "6px",
-                    cursor: "pointer",
-                  }}
-                >
-                  Save Guidelines
-                </button>
-                <button
-                  onClick={() => {
-                    // Reset to default
-                    const defaultGuidelines = {
-                      keto: {
-                        name: "Keto Diet",
-                        description: "Low-carb, high-fat diet for ketosis",
-                        guidelines: `Keto Diet Guidelines:
-- Target macros: 70-80% fat, 20-25% protein, 5-10% carbs
-- Daily carb limit: 20-50g net carbs
-- Focus on high-fat foods, moderate protein, very low carbs
-- Avoid: grains, sugar, most fruits, starchy vegetables
-- Include: meat, fish, eggs, dairy, nuts, seeds, low-carb vegetables`,
-                        inflammatoryFoods: [
-                          "grains",
-                          "sugar",
-                          "processed foods",
-                          "refined carbs",
-                        ],
-                      },
-                      antiInflammatory: {
-                        name: "Anti-Inflammatory",
-                        description: "Reduce inflammation through diet",
-                        guidelines: `Anti-Inflammatory Diet Guidelines:
-- Focus on whole, unprocessed foods
-- Include: fatty fish, berries, leafy greens, nuts, olive oil
-- Avoid: processed meats, refined carbs, added sugars, trans fats
-- Limit: alcohol, fried foods, excessive red meat
-- Emphasize: omega-3 rich foods, antioxidants, fiber`,
-                        inflammatoryFoods: [
-                          "processed meats",
-                          "refined carbs",
-                          "added sugars",
-                          "trans fats",
-                          "fried foods",
-                          "excessive alcohol",
-                        ],
-                      },
-                    };
-                    setGoalGuidelines((prev) => ({
-                      ...prev,
-                      [selectedGoal]: defaultGuidelines[selectedGoal],
-                    }));
-                  }}
-                  style={{
-                    padding: "8px 16px",
-                    background: "#6c757d",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "6px",
-                    cursor: "pointer",
-                  }}
-                >
-                  Reset to Default
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div
-              style={{
-                fontSize: "14px",
-                color: "#666",
-                lineHeight: "1.6",
-                whiteSpace: "pre-line",
-              }}
-            >
-              {goalGuidelines[selectedGoal]?.guidelines ||
-                "No guidelines set for this goal."}
-            </div>
-          )}
-        </div>
       </div>
     );
   };
