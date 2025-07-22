@@ -2203,6 +2203,9 @@ function AppContent() {
   );
 
   const renderHistoryTab = () => {
+    const stats = getDailyStats();
+    const macroData = getMacroData();
+
     const toggleMealExpansion = (mealId) => {
       const newExpanded = new Set(expandedMeals);
       if (newExpanded.has(mealId)) {
@@ -2216,6 +2219,74 @@ function AppContent() {
     return (
       <div className="card">
         <h2 style={{ marginBottom: "20px" }}>📋 Meal History</h2>
+
+        {/* Today's Progress - Added to top */}
+        <div style={{ marginBottom: "24px" }}>
+          <h3 style={{ marginBottom: "16px", color: "#333" }}>
+            Today's Progress
+          </h3>
+          <div className="stats-grid">
+            <div className="stat-card">
+              <div className="stat-value macro-display">
+                {formatApproximateMacro(stats.totalCalories)}
+              </div>
+              <div className="stat-label">Total Calories</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-value macro-display">
+                {formatApproximateMacro(stats.totalProtein)}g
+              </div>
+              <div className="stat-label">Protein</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-value macro-display">
+                {formatApproximateMacro(stats.totalCarbs)}g
+              </div>
+              <div className="stat-label">Carbs</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-value macro-display">
+                {formatApproximateMacro(stats.totalFat)}g
+              </div>
+              <div className="stat-label">Fat</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Macronutrient Distribution Chart */}
+        {macroData.length > 0 && (
+          <div style={{ marginBottom: "24px" }}>
+            <h3 style={{ marginBottom: "16px", color: "#333" }}>
+              Macronutrient Distribution
+            </h3>
+            <div style={{ height: "200px" }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={macroData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percent }) =>
+                      `${name} ${(percent * 100).toFixed(0)}%`
+                    }
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {macroData.map((entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={["#667eea", "#764ba2", "#f093fb"][index % 3]}
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
 
         {meals.length === 0 ? (
           <div
