@@ -860,16 +860,34 @@ function AppContent() {
       let isCompliant = true;
       const details = {};
 
+      // Always include macro values in details for display purposes
+      details.calories = {
+        value: meal.analysis?.total_calories || 0,
+        target: targets.calories || null,
+        good: true, // Will be updated below if target exists
+      };
+      details.protein = {
+        value: protein,
+        target: targets.protein || null,
+        good: true, // Will be updated below if target exists
+      };
+      details.carbs = {
+        value: carbs,
+        target: targets.carbs || null,
+        good: true, // Will be updated below if target exists
+      };
+      details.fat = {
+        value: fat,
+        target: targets.fat || null,
+        good: true, // Will be updated below if target exists
+      };
+
       // Check calories if target exists
       if (targets.calories) {
         const mealCalories = meal.analysis?.total_calories || 0;
         const calorieRatio = mealCalories / targets.calories;
         const calorieGood = calorieRatio >= 0.8 && calorieRatio <= 1.2; // Within 20% of target
-        details.calories = {
-          value: mealCalories,
-          target: targets.calories,
-          good: calorieGood,
-        };
+        details.calories.good = calorieGood;
         if (!calorieGood) {
           score -= 20;
           isCompliant = false;
@@ -880,11 +898,7 @@ function AppContent() {
       if (targets.protein) {
         const proteinRatio = protein / targets.protein;
         const proteinGood = proteinRatio >= 0.7 && proteinRatio <= 1.3; // Within 30% of target
-        details.protein = {
-          value: protein,
-          target: targets.protein,
-          good: proteinGood,
-        };
+        details.protein.good = proteinGood;
         if (!proteinGood) {
           score -= 25;
           isCompliant = false;
@@ -893,13 +907,8 @@ function AppContent() {
 
       // Check carbs if target exists
       if (targets.carbs) {
-        const carbsRatio = carbs / targets.carbs;
         const carbsGood = carbs <= targets.carbs * 1.2; // Should not exceed target by more than 20%
-        details.carbs = {
-          value: carbs,
-          target: targets.carbs,
-          good: carbsGood,
-        };
+        details.carbs.good = carbsGood;
         if (!carbsGood) {
           score -= 25;
           isCompliant = false;
@@ -910,7 +919,7 @@ function AppContent() {
       if (targets.fat) {
         const fatRatio = fat / targets.fat;
         const fatGood = fatRatio >= 0.7 && fatRatio <= 1.3; // Within 30% of target
-        details.fat = { value: fat, target: targets.fat, good: fatGood };
+        details.fat.good = fatGood;
         if (!fatGood) {
           score -= 25;
           isCompliant = false;
