@@ -847,14 +847,92 @@ function AppContent() {
       fat = meal.fat || 0;
     }
 
-    // Calculate macro percentages
+    // If goal has numeric targets, use them for evaluation
+    if (
+      selectedGoal.targets &&
+      (selectedGoal.targets.calories ||
+        selectedGoal.targets.protein ||
+        selectedGoal.targets.carbs ||
+        selectedGoal.targets.fat)
+    ) {
+      const targets = selectedGoal.targets;
+      let score = 100; // Start with perfect score
+      let isCompliant = true;
+      const details = {};
+
+      // Check calories if target exists
+      if (targets.calories) {
+        const mealCalories = meal.analysis?.total_calories || 0;
+        const calorieRatio = mealCalories / targets.calories;
+        const calorieGood = calorieRatio >= 0.8 && calorieRatio <= 1.2; // Within 20% of target
+        details.calories = {
+          value: mealCalories,
+          target: targets.calories,
+          good: calorieGood,
+        };
+        if (!calorieGood) {
+          score -= 20;
+          isCompliant = false;
+        }
+      }
+
+      // Check protein if target exists
+      if (targets.protein) {
+        const proteinRatio = protein / targets.protein;
+        const proteinGood = proteinRatio >= 0.7 && proteinRatio <= 1.3; // Within 30% of target
+        details.protein = {
+          value: protein,
+          target: targets.protein,
+          good: proteinGood,
+        };
+        if (!proteinGood) {
+          score -= 25;
+          isCompliant = false;
+        }
+      }
+
+      // Check carbs if target exists
+      if (targets.carbs) {
+        const carbsRatio = carbs / targets.carbs;
+        const carbsGood = carbs <= targets.carbs * 1.2; // Should not exceed target by more than 20%
+        details.carbs = {
+          value: carbs,
+          target: targets.carbs,
+          good: carbsGood,
+        };
+        if (!carbsGood) {
+          score -= 25;
+          isCompliant = false;
+        }
+      }
+
+      // Check fat if target exists
+      if (targets.fat) {
+        const fatRatio = fat / targets.fat;
+        const fatGood = fatRatio >= 0.7 && fatRatio <= 1.3; // Within 30% of target
+        details.fat = { value: fat, target: targets.fat, good: fatGood };
+        if (!fatGood) {
+          score -= 25;
+          isCompliant = false;
+        }
+      }
+
+      // Ensure score doesn't go below 0
+      score = Math.max(0, score);
+
+      return {
+        compliant: isCompliant,
+        score: score,
+        details: details,
+      };
+    }
+
+    // Fallback to generic macro balance scoring for goals without numeric targets
     const totalMacros = protein + carbs + fat;
     const proteinPercent = totalMacros > 0 ? (protein / totalMacros) * 100 : 0;
     const carbsPercent = totalMacros > 0 ? (carbs / totalMacros) * 100 : 0;
     const fatPercent = totalMacros > 0 ? (fat / totalMacros) * 100 : 0;
 
-    // For now, use a simplified scoring system based on macro balance
-    // In the future, this could be enhanced to use the goal's evaluationCriteria
     let score = 50; // Base score
     let isCompliant = false;
 
