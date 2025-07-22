@@ -39,6 +39,12 @@ const GoalManager = ({ onGoalSelect, selectedGoalId }) => {
     description: "",
     guidelines: "",
     evaluationCriteria: "",
+    targets: {
+      calories: null,
+      protein: null,
+      carbs: null,
+      fat: null,
+    },
   });
   const [goalDescription, setGoalDescription] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -78,6 +84,12 @@ const GoalManager = ({ onGoalSelect, selectedGoalId }) => {
           description: response.data.goal.description,
           guidelines: response.data.goal.guidelines,
           evaluationCriteria: response.data.goal.evaluationCriteria,
+          targets: response.data.goal.targets || {
+            calories: null,
+            protein: null,
+            carbs: null,
+            fat: null,
+          },
         });
         setShowGeneratedForm(true);
         setShowCreateForm(false);
@@ -101,6 +113,12 @@ const GoalManager = ({ onGoalSelect, selectedGoalId }) => {
         description: "",
         guidelines: "",
         evaluationCriteria: "",
+        targets: {
+          calories: null,
+          protein: null,
+          carbs: null,
+          fat: null,
+        },
       });
       setGoalDescription("");
 
@@ -130,6 +148,12 @@ const GoalManager = ({ onGoalSelect, selectedGoalId }) => {
         description: "",
         guidelines: "",
         evaluationCriteria: "",
+        targets: {
+          calories: null,
+          protein: null,
+          carbs: null,
+          fat: null,
+        },
       });
       setGoalDescription("");
     } catch (error) {
@@ -164,6 +188,12 @@ const GoalManager = ({ onGoalSelect, selectedGoalId }) => {
       description: goal.description || "",
       guidelines: goal.guidelines || "",
       evaluationCriteria: goal.evaluation_criteria || "",
+      targets: goal.targets || {
+        calories: null,
+        protein: null,
+        carbs: null,
+        fat: null,
+      },
     });
   };
 
@@ -175,6 +205,12 @@ const GoalManager = ({ onGoalSelect, selectedGoalId }) => {
       description: "",
       guidelines: "",
       evaluationCriteria: "",
+      targets: {
+        calories: null,
+        protein: null,
+        carbs: null,
+        fat: null,
+      },
     });
     setGoalDescription("");
   };
@@ -302,6 +338,169 @@ const GoalManager = ({ onGoalSelect, selectedGoalId }) => {
                 resize: "vertical",
               }}
             />
+          </div>
+
+          {/* Numeric Targets Section */}
+          <div style={{ marginBottom: "20px" }}>
+            <h4
+              style={{ marginBottom: "12px", color: "#333", fontSize: "16px" }}
+            >
+              🎯 Numeric Targets (Optional)
+            </h4>
+            <p
+              style={{ marginBottom: "12px", color: "#666", fontSize: "14px" }}
+            >
+              Set specific calorie and macro targets for this goal. Leave blank
+              if not applicable.
+            </p>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: "12px",
+              }}
+            >
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: "4px",
+                    fontWeight: "500",
+                    fontSize: "14px",
+                  }}
+                >
+                  Daily Calories
+                </label>
+                <input
+                  type="number"
+                  value={formData.targets.calories || ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      targets: {
+                        ...formData.targets,
+                        calories: e.target.value
+                          ? parseInt(e.target.value)
+                          : null,
+                      },
+                    })
+                  }
+                  placeholder="e.g., 2000"
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    border: "1px solid #ddd",
+                    borderRadius: "6px",
+                    fontSize: "14px",
+                  }}
+                />
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: "4px",
+                    fontWeight: "500",
+                    fontSize: "14px",
+                  }}
+                >
+                  Protein (g)
+                </label>
+                <input
+                  type="number"
+                  value={formData.targets.protein || ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      targets: {
+                        ...formData.targets,
+                        protein: e.target.value
+                          ? parseInt(e.target.value)
+                          : null,
+                      },
+                    })
+                  }
+                  placeholder="e.g., 150"
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    border: "1px solid #ddd",
+                    borderRadius: "6px",
+                    fontSize: "14px",
+                  }}
+                />
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: "4px",
+                    fontWeight: "500",
+                    fontSize: "14px",
+                  }}
+                >
+                  Carbs (g)
+                </label>
+                <input
+                  type="number"
+                  value={formData.targets.carbs || ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      targets: {
+                        ...formData.targets,
+                        carbs: e.target.value ? parseInt(e.target.value) : null,
+                      },
+                    })
+                  }
+                  placeholder="e.g., 200"
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    border: "1px solid #ddd",
+                    borderRadius: "6px",
+                    fontSize: "14px",
+                  }}
+                />
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: "4px",
+                    fontWeight: "500",
+                    fontSize: "14px",
+                  }}
+                >
+                  Fat (g)
+                </label>
+                <input
+                  type="number"
+                  value={formData.targets.fat || ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      targets: {
+                        ...formData.targets,
+                        fat: e.target.value ? parseInt(e.target.value) : null,
+                      },
+                    })
+                  }
+                  placeholder="e.g., 65"
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    border: "1px solid #ddd",
+                    borderRadius: "6px",
+                    fontSize: "14px",
+                  }}
+                />
+              </div>
+            </div>
           </div>
 
           <div
@@ -470,6 +669,169 @@ const GoalManager = ({ onGoalSelect, selectedGoalId }) => {
             />
           </div>
 
+          {/* Numeric Targets Section */}
+          <div style={{ marginBottom: "20px" }}>
+            <h4
+              style={{ marginBottom: "12px", color: "#333", fontSize: "16px" }}
+            >
+              🎯 Numeric Targets (Optional)
+            </h4>
+            <p
+              style={{ marginBottom: "12px", color: "#666", fontSize: "14px" }}
+            >
+              Set specific calorie and macro targets for this goal. Leave blank
+              if not applicable.
+            </p>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: "12px",
+              }}
+            >
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: "4px",
+                    fontWeight: "500",
+                    fontSize: "14px",
+                  }}
+                >
+                  Daily Calories
+                </label>
+                <input
+                  type="number"
+                  value={formData.targets.calories || ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      targets: {
+                        ...formData.targets,
+                        calories: e.target.value
+                          ? parseInt(e.target.value)
+                          : null,
+                      },
+                    })
+                  }
+                  placeholder="e.g., 2000"
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    border: "1px solid #ddd",
+                    borderRadius: "6px",
+                    fontSize: "14px",
+                  }}
+                />
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: "4px",
+                    fontWeight: "500",
+                    fontSize: "14px",
+                  }}
+                >
+                  Protein (g)
+                </label>
+                <input
+                  type="number"
+                  value={formData.targets.protein || ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      targets: {
+                        ...formData.targets,
+                        protein: e.target.value
+                          ? parseInt(e.target.value)
+                          : null,
+                      },
+                    })
+                  }
+                  placeholder="e.g., 150"
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    border: "1px solid #ddd",
+                    borderRadius: "6px",
+                    fontSize: "14px",
+                  }}
+                />
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: "4px",
+                    fontWeight: "500",
+                    fontSize: "14px",
+                  }}
+                >
+                  Carbs (g)
+                </label>
+                <input
+                  type="number"
+                  value={formData.targets.carbs || ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      targets: {
+                        ...formData.targets,
+                        carbs: e.target.value ? parseInt(e.target.value) : null,
+                      },
+                    })
+                  }
+                  placeholder="e.g., 200"
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    border: "1px solid #ddd",
+                    borderRadius: "6px",
+                    fontSize: "14px",
+                  }}
+                />
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: "4px",
+                    fontWeight: "500",
+                    fontSize: "14px",
+                  }}
+                >
+                  Fat (g)
+                </label>
+                <input
+                  type="number"
+                  value={formData.targets.fat || ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      targets: {
+                        ...formData.targets,
+                        fat: e.target.value ? parseInt(e.target.value) : null,
+                      },
+                    })
+                  }
+                  placeholder="e.g., 65"
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    border: "1px solid #ddd",
+                    borderRadius: "6px",
+                    fontSize: "14px",
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
           <div
             style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}
           >
@@ -482,6 +844,12 @@ const GoalManager = ({ onGoalSelect, selectedGoalId }) => {
                   description: "",
                   guidelines: "",
                   evaluationCriteria: "",
+                  targets: {
+                    calories: null,
+                    protein: null,
+                    carbs: null,
+                    fat: null,
+                  },
                 });
                 setGoalDescription("");
               }}
@@ -738,6 +1106,61 @@ const GoalManager = ({ onGoalSelect, selectedGoalId }) => {
                         {goal.description}
                       </p>
                     )}
+
+                    {/* Numeric Targets Display */}
+                    {goal.targets &&
+                      (goal.targets.calories ||
+                        goal.targets.protein ||
+                        goal.targets.carbs ||
+                        goal.targets.fat) && (
+                        <div
+                          style={{
+                            marginTop: "8px",
+                            padding: "8px",
+                            background: "#f8f9fa",
+                            borderRadius: "6px",
+                            fontSize: "12px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontWeight: "500",
+                              marginBottom: "4px",
+                              color: "#333",
+                            }}
+                          >
+                            🎯 Targets:
+                          </div>
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: "12px",
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            {goal.targets.calories && (
+                              <span style={{ color: "#667eea" }}>
+                                {goal.targets.calories} cal
+                              </span>
+                            )}
+                            {goal.targets.protein && (
+                              <span style={{ color: "#764ba2" }}>
+                                {goal.targets.protein}g protein
+                              </span>
+                            )}
+                            {goal.targets.carbs && (
+                              <span style={{ color: "#f093fb" }}>
+                                {goal.targets.carbs}g carbs
+                              </span>
+                            )}
+                            {goal.targets.fat && (
+                              <span style={{ color: "#ff6b6b" }}>
+                                {goal.targets.fat}g fat
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                     <div
                       style={{

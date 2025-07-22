@@ -52,6 +52,10 @@ function initDatabase() {
             description TEXT,
             guidelines TEXT,
             evaluation_criteria TEXT,
+            target_calories INTEGER,
+            target_protein REAL,
+            target_carbs REAL,
+            target_fat REAL,
             is_active BOOLEAN DEFAULT 1,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -328,40 +332,48 @@ function getDailyStats(date, userId) {
 // Goal management functions
 function createGoal(goalData) {
   return new Promise((resolve, reject) => {
-    const { userId, name, description, guidelines, evaluationCriteria } =
-      goalData;
+    const {
+      userId,
+      name,
+      description,
+      guidelines,
+      evaluationCriteria,
+      targets,
+    } = goalData;
 
     const query = `
-      INSERT INTO goals (user_id, name, description, guidelines, evaluation_criteria)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO goals (user_id, name, description, guidelines, evaluation_criteria, target_calories, target_protein, target_carbs, target_fat)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
-    db.run(
-      query,
-      [
-        userId,
-        name,
-        description || null,
-        guidelines || null,
-        evaluationCriteria || null,
-      ],
-      function (err) {
-        if (err) {
-          console.error("Error creating goal:", err);
-          reject(err);
-          return;
-        }
+    const targetValues = [
+      userId,
+      name,
+      description || null,
+      guidelines || null,
+      evaluationCriteria || null,
+      targets?.calories || null,
+      targets?.protein || null,
+      targets?.carbs || null,
+      targets?.fat || null,
+    ];
 
-        resolve(this.lastID);
+    db.run(query, targetValues, function (err) {
+      if (err) {
+        console.error("Error creating goal:", err);
+        reject(err);
+        return;
       }
-    );
+
+      resolve(this.lastID);
+    });
   });
 }
 
 function getGoals(userId) {
   return new Promise((resolve, reject) => {
     const query = `
-      SELECT id, name, description, guidelines, evaluation_criteria, is_active, created_at, updated_at
+      SELECT id, name, description, guidelines, evaluation_criteria, target_calories, target_protein, target_carbs, target_fat, is_active, created_at, updated_at
       FROM goals
       WHERE user_id = ?
       ORDER BY created_at DESC
@@ -374,7 +386,18 @@ function getGoals(userId) {
         return;
       }
 
-      resolve(rows);
+      // Transform the data to include targets object
+      const transformedRows = rows.map((row) => ({
+        ...row,
+        targets: {
+          calories: row.target_calories,
+          protein: row.target_protein,
+          carbs: row.target_carbs,
+          fat: row.target_fat,
+        },
+      }));
+
+      resolve(transformedRows);
     });
   });
 }
@@ -382,7 +405,7 @@ function getGoals(userId) {
 function getGoal(goalId, userId) {
   return new Promise((resolve, reject) => {
     const query = `
-      SELECT id, name, description, guidelines, evaluation_criteria, is_active, created_at, updated_at
+      SELECT id, name, description, guidelines, evaluation_criteria, target_calories, target_protein, target_carbs, target_fat, is_active, created_at, updated_at
       FROM goals
       WHERE id = ? AND user_id = ?
     `;
@@ -394,6 +417,16 @@ function getGoal(goalId, userId) {
         return;
       }
 
+      if (row) {
+        // Transform the data to include targets object
+        row.targets = {
+          calories: row.target_calories,
+          protein: row.target_protein,
+          carbs: row.target_carbs,
+          fat: row.target_fat,
+        };
+      }
+
       resolve(row);
     });
   });
@@ -401,12 +434,18 @@ function getGoal(goalId, userId) {
 
 function updateGoal(goalId, userId, goalData) {
   return new Promise((resolve, reject) => {
-    const { name, description, guidelines, evaluationCriteria, isActive } =
-      goalData;
+    const {
+      name,
+      description,
+      guidelines,
+      evaluationCriteria,
+      targets,
+      isActive,
+    } = goalData;
 
     const query = `
       UPDATE goals
-      SET name = ?, description = ?, guidelines = ?, evaluation_criteria = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
+      SET name = ?, description = ?, guidelines = ?, evaluation_criteria = ?, target_calories = ?, target_protein = ?, target_carbs = ?, target_fat = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND user_id = ?
     `;
 
@@ -417,6 +456,10 @@ function updateGoal(goalId, userId, goalData) {
         description || null,
         guidelines || null,
         evaluationCriteria || null,
+        targets?.calories || null,
+        targets?.protein || null,
+        targets?.carbs || null,
+        targets?.fat || null,
         isActive ? 1 : 0,
         goalId,
         userId,

@@ -643,7 +643,8 @@ app.post("/api/generate-goal", authenticateUser, async (req, res) => {
 
 app.post("/api/goals", authenticateUser, async (req, res) => {
   try {
-    const { name, description, guidelines, evaluationCriteria } = req.body;
+    const { name, description, guidelines, evaluationCriteria, targets } =
+      req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({ error: "Goal name is required" });
@@ -655,6 +656,12 @@ app.post("/api/goals", authenticateUser, async (req, res) => {
       description: description?.trim(),
       guidelines: guidelines?.trim(),
       evaluationCriteria: evaluationCriteria?.trim(),
+      targets: targets || {
+        calories: null,
+        protein: null,
+        carbs: null,
+        fat: null,
+      },
     });
 
     res.json({ success: true, goalId });
@@ -693,8 +700,14 @@ app.get("/api/goals/:id", authenticateUser, async (req, res) => {
 app.put("/api/goals/:id", authenticateUser, async (req, res) => {
   try {
     const goalId = req.params.id;
-    const { name, description, guidelines, evaluationCriteria, isActive } =
-      req.body;
+    const {
+      name,
+      description,
+      guidelines,
+      evaluationCriteria,
+      targets,
+      isActive,
+    } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({ error: "Goal name is required" });
@@ -705,6 +718,12 @@ app.put("/api/goals/:id", authenticateUser, async (req, res) => {
       description: description?.trim(),
       guidelines: guidelines?.trim(),
       evaluationCriteria: evaluationCriteria?.trim(),
+      targets: targets || {
+        calories: null,
+        protein: null,
+        carbs: null,
+        fat: null,
+      },
       isActive: isActive !== false, // Default to true if not specified
     });
 

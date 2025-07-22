@@ -733,6 +733,21 @@ Generate a detailed set of guidelines that includes:
 5. Specific nutritional targets
 6. Tips for success
 
+CRITICAL: You MUST provide numeric targets in the "targets" object for ANY goal that involves:
+- Weight loss/weight gain (calorie targets)
+- Muscle building (protein targets)
+- Keto/low-carb (carb targets)
+- Specific macro ratios (protein/carb/fat targets)
+- Calorie counting goals
+
+Examples of when to provide numeric targets:
+- "Lose 10 pounds" → targets: {calories: 1800, protein: 120, carbs: 150, fat: 60}
+- "Gain muscle" → targets: {calories: 2500, protein: 150, carbs: 250, fat: 80}
+- "Keto diet" → targets: {calories: 2000, protein: 120, carbs: 25, fat: 160}
+- "Maintain weight" → targets: {calories: 2200, protein: 110, carbs: 200, fat: 75}
+
+Only use null values if the goal truly doesn't involve specific numeric targets (like "eat more vegetables" or "reduce processed foods").
+
 Make the guidelines practical, actionable, and easy to follow. Write in a clear, friendly tone.`;
 
     console.log("🤖 Calling OpenAI for goal guidelines generation...");
@@ -779,12 +794,42 @@ Make the guidelines practical, actionable, and easy to follow. Write in a clear,
                 description:
                   "Specific criteria for evaluating meal compliance with this goal",
               },
+              targets: {
+                type: "object",
+                description:
+                  "Numeric targets for calories and macros (null if not applicable)",
+                properties: {
+                  calories: {
+                    type: ["integer", "null"],
+                    description:
+                      "Daily calorie target (e.g., 1800 for weight loss, null if not specified)",
+                  },
+                  protein: {
+                    type: ["number", "null"],
+                    description:
+                      "Daily protein target in grams (e.g., 120 for muscle building, null if not specified)",
+                  },
+                  carbs: {
+                    type: ["number", "null"],
+                    description:
+                      "Daily carbs target in grams (e.g., 50 for keto, null if not specified)",
+                  },
+                  fat: {
+                    type: ["number", "null"],
+                    description:
+                      "Daily fat target in grams (e.g., 65 for balanced diet, null if not specified)",
+                  },
+                },
+                required: ["calories", "protein", "carbs", "fat"],
+                additionalProperties: false,
+              },
             },
             required: [
               "name",
               "description",
               "guidelines",
               "evaluationCriteria",
+              "targets",
             ],
             additionalProperties: false,
           },
@@ -819,6 +864,12 @@ Make the guidelines practical, actionable, and easy to follow. Write in a clear,
           description: guidelines.description,
           guidelines: guidelines.guidelines,
           evaluationCriteria: guidelines.evaluationCriteria,
+          targets: guidelines.targets || {
+            calories: null,
+            protein: null,
+            carbs: null,
+            fat: null,
+          },
         };
       } catch (parseError) {
         console.error(

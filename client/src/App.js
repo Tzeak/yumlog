@@ -16,7 +16,19 @@ import {
 } from "lucide-react";
 import axios from "axios";
 import { format } from "date-fns";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Legend,
+} from "recharts";
 import {
   ClerkProvider,
   SignIn,
@@ -82,7 +94,6 @@ function AppContent() {
   const [ingredientEditText, setIngredientEditText] = useState("");
   const [isReanalyzing, setIsReanalyzing] = useState(false);
   const [hasUnanalyzedChanges, setHasUnanalyzedChanges] = useState(false);
-  const [isSavingMeal, setIsSavingMeal] = useState(false);
 
   // State for success message
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
@@ -101,6 +112,12 @@ function AppContent() {
     useState(false);
   const [analysisCache, setAnalysisCache] = useState({});
   const [todayRecommendationCache, setTodayRecommendationCache] = useState({});
+  const [visibleMacros, setVisibleMacros] = useState({
+    calories: true,
+    protein: true,
+    carbs: true,
+    fat: true,
+  });
 
   const phone = user?.primaryPhoneNumber?.phoneNumber || "unknown user";
 
@@ -475,15 +492,6 @@ function AppContent() {
     return `${foodNames[0]}, ${foodNames[1]} & more`;
   };
 
-  // Helper function to format macro values as approximate whole numbers
-  const formatApproximateMacro = (value) => {
-    if (value === null || value === undefined || isNaN(value)) {
-      return "~0";
-    }
-    const rounded = Math.round(value);
-    return `~${rounded}`;
-  };
-
   const getGoalComplianceLabel = (score) => {
     if (score >= 90) return "Exceeds Goals";
     if (score >= 75) return "Meets Goals";
@@ -501,11 +509,7 @@ function AppContent() {
   const saveMealWithModifications = async () => {
     if (!analysis || editableIngredients.length === 0) return;
 
-    // Prevent multiple saves
-    if (isSavingMeal) return;
-
     try {
-      setIsSavingMeal(true);
       logUserAction({ phone, action: "clicked Save Meal" });
       const totals = getUpdatedTotals();
 
@@ -584,8 +588,6 @@ function AppContent() {
         action: "saveMeal error",
         status: error?.response?.status || 500,
       });
-    } finally {
-      setIsSavingMeal(false);
     }
   };
 
@@ -621,6 +623,73 @@ function AppContent() {
       { name: "Carbs", value: stats.totalCarbs, color: "#764ba2" },
       { name: "Fat", value: stats.totalFat, color: "#f093fb" },
     ].filter((item) => item.value > 0);
+  };
+
+  const getTimeSeriesData = () => {
+    // Group meals by date and calculate daily totals
+    const dailyData = {};
+
+    meals.forEach((meal) => {
+      const date = format(new Date(meal.createdAt), "MMM dd");
+      if (!dailyData[date]) {
+        dailyData[date] = {
+          date,
+          calories: 0,
+          protein: 0,
+          carbs: 0,
+          fat: 0,
+        };
+      }
+
+      dailyData[date].calories += meal.analysis.total_calories || 0;
+      dailyData[date].protein += meal.analysis.total_protein || 0;
+      dailyData[date].carbs += meal.analysis.total_carbs || 0;
+      dailyData[date].fat += meal.analysis.total_fat || 0;
+    });
+
+    // Convert to array and sort by date
+    const timeSeriesData = Object.values(dailyData)
+      .sort((a, b) => new Date(a.date) - new Date(b.date))
+      .slice(-7); // Show last 7 days
+
+    // Add target values if a goal is selected
+    if (selectedGoal?.targets) {
+      timeSeriesData.forEach((day) => {
+        if (selectedGoal.targets.calories)
+          day.calorieTarget = selectedGoal.targets.calories;
+        if (selectedGoal.targets.protein)
+          day.proteinTarget = selectedGoal.targets.protein;
+        if (selectedGoal.targets.carbs)
+          day.carbsTarget = selectedGoal.targets.carbs;
+        if (selectedGoal.targets.fat) day.fatTarget = selectedGoal.targets.fat;
+      });
+    }
+
+    return timeSeriesData;
+  };
+
+  const formatApproximateMacro = (value) => {
+    if (value === null || value === undefined || isNaN(value)) {
+      return "~0";
+    }
+    const rounded = Math.round(value);
+    return `~${rounded}`;
+  };
+
+  const toggleMacro = (macro) => {
+    setVisibleMacros((prev) => ({
+      ...prev,
+      [macro]: !prev[macro],
+    }));
+  };
+
+  const toggleAllMacros = (show) => {
+    setVisibleMacros({
+      calories: show,
+      protein: show,
+      carbs: show,
+      fat: show,
+    });
   };
 
   // New function to analyze goals
@@ -1805,13 +1874,14 @@ function AppContent() {
                         }}
                       >
                         <div
+                          className="macro-display"
                           style={{
                             fontSize: "16px",
                             fontWeight: "bold",
                             color: "#667eea",
                           }}
                         >
-                          {ingredient.calories}
+                          {formatApproximateMacro(ingredient.calories)}
                         </div>
                         <div style={{ fontSize: "12px", color: "#666" }}>
                           cal
@@ -1826,13 +1896,14 @@ function AppContent() {
                         }}
                       >
                         <div
+                          className="macro-display"
                           style={{
                             fontSize: "16px",
                             fontWeight: "bold",
                             color: "#667eea",
                           }}
                         >
-                          {ingredient.protein}g
+                          {formatApproximateMacro(ingredient.protein)}g
                         </div>
                         <div style={{ fontSize: "12px", color: "#666" }}>
                           protein
@@ -1847,13 +1918,14 @@ function AppContent() {
                         }}
                       >
                         <div
+                          className="macro-display"
                           style={{
                             fontSize: "16px",
                             fontWeight: "bold",
                             color: "#667eea",
                           }}
                         >
-                          {ingredient.carbs}g
+                          {formatApproximateMacro(ingredient.carbs)}g
                         </div>
                         <div style={{ fontSize: "12px", color: "#666" }}>
                           carbs
@@ -1868,13 +1940,14 @@ function AppContent() {
                         }}
                       >
                         <div
+                          className="macro-display"
                           style={{
                             fontSize: "16px",
                             fontWeight: "bold",
                             color: "#667eea",
                           }}
                         >
-                          {ingredient.fat}g
+                          {formatApproximateMacro(ingredient.fat)}g
                         </div>
                         <div style={{ fontSize: "12px", color: "#666" }}>
                           fat
@@ -2109,28 +2182,18 @@ function AppContent() {
               </div>
               <button
                 onClick={saveMealWithModifications}
-                disabled={hasUnanalyzedChanges || isSavingMeal}
+                disabled={hasUnanalyzedChanges}
                 className="btn btn-primary"
                 style={{
                   padding: "12px 24px",
                   fontSize: "16px",
-                  background:
-                    hasUnanalyzedChanges || isSavingMeal
-                      ? "#6c757d"
-                      : "#28a745",
+                  background: hasUnanalyzedChanges ? "#6c757d" : "#28a745",
                   border: "none",
-                  opacity: hasUnanalyzedChanges || isSavingMeal ? 0.6 : 1,
-                  cursor:
-                    hasUnanalyzedChanges || isSavingMeal
-                      ? "not-allowed"
-                      : "pointer",
+                  opacity: hasUnanalyzedChanges ? 0.6 : 1,
+                  cursor: hasUnanalyzedChanges ? "not-allowed" : "pointer",
                 }}
               >
-                {hasUnanalyzedChanges
-                  ? "Save (Disabled)"
-                  : isSavingMeal
-                  ? "Saving..."
-                  : "Save Meal"}
+                {hasUnanalyzedChanges ? "Save (Disabled)" : "Save Meal"}
               </button>
             </div>
           </div>
@@ -2344,10 +2407,21 @@ function AppContent() {
                                 color: "#666",
                               }}
                             >
-                              <span>{ingredient.calories} cal</span>
-                              <span>{ingredient.protein}g protein</span>
-                              <span>{ingredient.carbs}g carbs</span>
-                              <span>{ingredient.fat}g fat</span>
+                              <span className="macro-display">
+                                {formatApproximateMacro(ingredient.calories)}{" "}
+                                cal
+                              </span>
+                              <span className="macro-display">
+                                {formatApproximateMacro(ingredient.protein)}g
+                                protein
+                              </span>
+                              <span className="macro-display">
+                                {formatApproximateMacro(ingredient.carbs)}g
+                                carbs
+                              </span>
+                              <span className="macro-display">
+                                {formatApproximateMacro(ingredient.fat)}g fat
+                              </span>
                             </div>
                           </div>
                         ))}
@@ -2408,6 +2482,7 @@ function AppContent() {
   const renderGoalsTab = () => {
     const stats = getDailyStats();
     const macroData = getMacroData();
+    const timeSeriesData = getTimeSeriesData();
 
     const handleGoalSelect = (goalId, goal) => {
       setSelectedGoalId(goalId);
@@ -2417,6 +2492,319 @@ function AppContent() {
     return (
       <div className="card">
         <h2 style={{ marginBottom: "20px" }}>🎯 Yum Goals</h2>
+
+        {/* Today's Progress - Moved to top */}
+        <div style={{ marginBottom: "24px" }}>
+          <h3 style={{ marginBottom: "16px", color: "#333" }}>
+            Today's Progress
+            {selectedGoal?.targets?.calories && (
+              <span
+                style={{
+                  fontSize: "14px",
+                  color: "#666",
+                  fontWeight: "normal",
+                }}
+              >
+                {" "}
+                • Target: {selectedGoal.targets.calories} cal
+              </span>
+            )}
+          </h3>
+          <div className="stats-grid">
+            <div className="stat-card">
+              <div
+                className="stat-value macro-display"
+                style={{
+                  color:
+                    selectedGoal?.targets?.calories &&
+                    stats.totalCalories > selectedGoal.targets.calories
+                      ? "#ff6b6b"
+                      : selectedGoal?.targets?.calories &&
+                        stats.totalCalories <
+                          selectedGoal.targets.calories * 0.8
+                      ? "#ffa500"
+                      : "#333",
+                }}
+              >
+                {formatApproximateMacro(stats.totalCalories)}
+              </div>
+              <div className="stat-label">Total Calories</div>
+            </div>
+            <div className="stat-card">
+              <div
+                className="stat-value macro-display"
+                style={{
+                  color:
+                    selectedGoal?.targets?.protein &&
+                    stats.totalProtein < selectedGoal.targets.protein * 0.8
+                      ? "#ffa500"
+                      : "#333",
+                }}
+              >
+                {formatApproximateMacro(stats.totalProtein)}g
+              </div>
+              <div className="stat-label">Protein</div>
+            </div>
+            <div className="stat-card">
+              <div
+                className="stat-value macro-display"
+                style={{
+                  color:
+                    selectedGoal?.targets?.carbs &&
+                    stats.totalCarbs > selectedGoal.targets.carbs * 1.2
+                      ? "#ff6b6b"
+                      : "#333",
+                }}
+              >
+                {formatApproximateMacro(stats.totalCarbs)}g
+              </div>
+              <div className="stat-label">Carbs</div>
+            </div>
+            <div className="stat-card">
+              <div
+                className="stat-value macro-display"
+                style={{
+                  color:
+                    selectedGoal?.targets?.fat &&
+                    stats.totalFat > selectedGoal.targets.fat * 1.2
+                      ? "#ff6b6b"
+                      : "#333",
+                }}
+              >
+                {formatApproximateMacro(stats.totalFat)}g
+              </div>
+              <div className="stat-label">Fat</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Time Series Chart with Goal Targets - Moved to top */}
+        {timeSeriesData.length > 0 && (
+          <div style={{ marginBottom: "24px" }}>
+            <h3 style={{ marginBottom: "16px", color: "#333" }}>
+              Nutrition Trends (Last 7 Days)
+              {selectedGoal?.targets && (
+                <span
+                  style={{
+                    fontSize: "14px",
+                    color: "#666",
+                    fontWeight: "normal",
+                  }}
+                >
+                  {" "}
+                  {selectedGoal.targets.calories &&
+                    `• Target: ${selectedGoal.targets.calories} cal`}
+                </span>
+              )}
+            </h3>
+
+            {/* Macro Toggle Buttons */}
+            <div
+              style={{
+                marginBottom: "16px",
+                display: "flex",
+                gap: "8px",
+                flexWrap: "wrap",
+                alignItems: "center",
+              }}
+            >
+              {[
+                { key: "calories", label: "Calories", color: "#667eea" },
+                { key: "protein", label: "Protein", color: "#764ba2" },
+                { key: "carbs", label: "Carbs", color: "#f093fb" },
+                { key: "fat", label: "Fat", color: "#ff6b6b" },
+              ].map(({ key, label, color }) => (
+                <button
+                  key={key}
+                  onClick={() => toggleMacro(key)}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: "20px",
+                    border: "1px solid #ddd",
+                    background: visibleMacros[key] ? color : "#f8f9fa",
+                    color: visibleMacros[key] ? "white" : "#666",
+                    cursor: "pointer",
+                    fontSize: "12px",
+                    fontWeight: "500",
+                    transition: "all 0.2s ease",
+                    opacity: visibleMacros[key] ? 1 : 0.6,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!visibleMacros[key]) {
+                      e.currentTarget.style.background = "#e9ecef";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!visibleMacros[key]) {
+                      e.currentTarget.style.background = "#f8f9fa";
+                    }
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+
+              <div style={{ marginLeft: "8px", display: "flex", gap: "4px" }}>
+                <button
+                  onClick={() => toggleAllMacros(true)}
+                  style={{
+                    padding: "4px 8px",
+                    borderRadius: "12px",
+                    border: "1px solid #ddd",
+                    background: "#f8f9fa",
+                    color: "#666",
+                    cursor: "pointer",
+                    fontSize: "10px",
+                    fontWeight: "500",
+                    transition: "all 0.2s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "#e9ecef";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "#f8f9fa";
+                  }}
+                >
+                  Show All
+                </button>
+                <button
+                  onClick={() => toggleAllMacros(false)}
+                  style={{
+                    padding: "4px 8px",
+                    borderRadius: "12px",
+                    border: "1px solid #ddd",
+                    background: "#f8f9fa",
+                    color: "#666",
+                    cursor: "pointer",
+                    fontSize: "10px",
+                    fontWeight: "500",
+                    transition: "all 0.2s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "#e9ecef";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "#f8f9fa";
+                  }}
+                >
+                  Hide All
+                </button>
+              </div>
+            </div>
+            <div style={{ height: "300px" }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={timeSeriesData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 12 }}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 12 }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <Tooltip
+                    formatter={(value, name) => [
+                      name === "calories"
+                        ? `${Math.round(value)} cal`
+                        : `${Math.round(value)}g`,
+                      name.charAt(0).toUpperCase() + name.slice(1),
+                    ]}
+                    labelStyle={{ color: "#333" }}
+                  />
+                  <Legend />
+                  {visibleMacros.calories && (
+                    <Line
+                      type="monotone"
+                      dataKey="calories"
+                      stroke="#667eea"
+                      strokeWidth={3}
+                      dot={{ fill: "#667eea", strokeWidth: 2, r: 4 }}
+                      activeDot={{ r: 6 }}
+                    />
+                  )}
+                  {visibleMacros.calories &&
+                    selectedGoal?.targets?.calories && (
+                      <Line
+                        type="monotone"
+                        dataKey="calorieTarget"
+                        stroke="#667eea"
+                        strokeWidth={2}
+                        strokeDasharray="5 5"
+                        dot={false}
+                        name="Calorie Target"
+                      />
+                    )}
+                  {visibleMacros.protein && (
+                    <Line
+                      type="monotone"
+                      dataKey="protein"
+                      stroke="#764ba2"
+                      strokeWidth={2}
+                      dot={{ fill: "#764ba2", strokeWidth: 2, r: 3 }}
+                      activeDot={{ r: 5 }}
+                    />
+                  )}
+                  {visibleMacros.protein && selectedGoal?.targets?.protein && (
+                    <Line
+                      type="monotone"
+                      dataKey="proteinTarget"
+                      stroke="#764ba2"
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      dot={false}
+                      name="Protein Target"
+                    />
+                  )}
+                  {visibleMacros.carbs && (
+                    <Line
+                      type="monotone"
+                      dataKey="carbs"
+                      stroke="#f093fb"
+                      strokeWidth={2}
+                      dot={{ fill: "#f093fb", strokeWidth: 2, r: 3 }}
+                      activeDot={{ r: 5 }}
+                    />
+                  )}
+                  {visibleMacros.carbs && selectedGoal?.targets?.carbs && (
+                    <Line
+                      type="monotone"
+                      dataKey="carbsTarget"
+                      stroke="#f093fb"
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      dot={false}
+                      name="Carbs Target"
+                    />
+                  )}
+                  {visibleMacros.fat && (
+                    <Line
+                      type="monotone"
+                      dataKey="fat"
+                      stroke="#ff6b6b"
+                      strokeWidth={2}
+                      dot={{ fill: "#ff6b6b", strokeWidth: 2, r: 3 }}
+                      activeDot={{ r: 5 }}
+                    />
+                  )}
+                  {visibleMacros.fat && selectedGoal?.targets?.fat && (
+                    <Line
+                      type="monotone"
+                      dataKey="fatTarget"
+                      stroke="#ff6b6b"
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      dot={false}
+                      name="Fat Target"
+                    />
+                  )}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
 
         {/* Goal Management */}
         <GoalManager
@@ -2587,9 +2975,7 @@ function AppContent() {
                 style={{ margin: "0 0 8px 0", fontSize: "14px", color: "#666" }}
               >
                 <strong>Average Calories:</strong>{" "}
-                <span className="macro-display">
-                  {formatApproximateMacro(goalStats.avgCalories)} per day
-                </span>
+                {goalStats.avgCalories.toFixed(0)} per day
               </p>
               <p
                 style={{ margin: "0 0 8px 0", fontSize: "14px", color: "#666" }}
@@ -2601,11 +2987,9 @@ function AppContent() {
               </p>
               <p style={{ margin: "0", fontSize: "14px", color: "#666" }}>
                 <strong>Average Macros:</strong>{" "}
-                <span className="macro-display">
-                  {formatApproximateMacro(goalStats.avgProtein)}g protein,{" "}
-                  {formatApproximateMacro(goalStats.avgCarbs)}g carbs,{" "}
-                  {formatApproximateMacro(goalStats.avgFat)}g fat
-                </span>
+                {goalStats.avgProtein.toFixed(1)}g protein,{" "}
+                {goalStats.avgCarbs.toFixed(1)}g carbs,{" "}
+                {goalStats.avgFat.toFixed(1)}g fat
               </p>
             </div>
           </div>
@@ -2702,11 +3086,8 @@ function AppContent() {
                           {getGoalComplianceLabel(goalEvaluation.score)}
                         </span>
                       </div>
-                      <span
-                        className="macro-display"
-                        style={{ fontSize: "12px", color: "#666" }}
-                      >
-                        {formatApproximateMacro(meal.calories)} cal
+                      <span style={{ fontSize: "12px", color: "#666" }}>
+                        {meal.calories.toFixed(0)} cal
                       </span>
                     </div>
 
@@ -2720,7 +3101,6 @@ function AppContent() {
                       }}
                     >
                       <span
-                        className="macro-display"
                         style={{
                           color: goalEvaluation.details.carbs?.good
                             ? "#28a745"
@@ -2728,14 +3108,9 @@ function AppContent() {
                           fontWeight: "bold",
                         }}
                       >
-                        Carbs:{" "}
-                        {formatApproximateMacro(
-                          goalEvaluation.details.carbs?.value
-                        )}
-                        g
+                        Carbs: {goalEvaluation.details.carbs?.value.toFixed(1)}g
                       </span>
                       <span
-                        className="macro-display"
                         style={{
                           color: goalEvaluation.details.fat?.good
                             ? "#28a745"
@@ -2743,14 +3118,9 @@ function AppContent() {
                           fontWeight: "bold",
                         }}
                       >
-                        Fat:{" "}
-                        {formatApproximateMacro(
-                          goalEvaluation.details.fat?.value
-                        )}
-                        g
+                        Fat: {goalEvaluation.details.fat?.value.toFixed(1)}g
                       </span>
                       <span
-                        className="macro-display"
                         style={{
                           color: goalEvaluation.details.protein?.good
                             ? "#28a745"
@@ -2759,10 +3129,7 @@ function AppContent() {
                         }}
                       >
                         Protein:{" "}
-                        {formatApproximateMacro(
-                          goalEvaluation.details.protein?.value
-                        )}
-                        g
+                        {goalEvaluation.details.protein?.value.toFixed(1)}g
                       </span>
                     </div>
 
@@ -2804,39 +3171,6 @@ function AppContent() {
             </p>
           </div>
         )}
-
-        {/* Daily Stats */}
-        <div style={{ marginBottom: "24px" }}>
-          <h3 style={{ marginBottom: "16px", color: "#333" }}>
-            Today's Progress
-          </h3>
-          <div className="stats-grid">
-            <div className="stat-card">
-              <div className="stat-value macro-display">
-                {formatApproximateMacro(stats.totalCalories)}
-              </div>
-              <div className="stat-label">Total Calories</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-value macro-display">
-                {formatApproximateMacro(stats.totalProtein)}g
-              </div>
-              <div className="stat-label">Protein</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-value macro-display">
-                {formatApproximateMacro(stats.totalCarbs)}g
-              </div>
-              <div className="stat-label">Carbs</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-value macro-display">
-                {formatApproximateMacro(stats.totalFat)}g
-              </div>
-              <div className="stat-label">Fat</div>
-            </div>
-          </div>
-        </div>
 
         {/* Macro Distribution Chart */}
         {macroData.length > 0 && (
