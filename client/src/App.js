@@ -2094,7 +2094,13 @@ function AppContent() {
                           step="0.1"
                           min="0.1"
                           max="10"
-                          defaultValue={ingredient.servingMultiplier.toFixed(1)}
+                          value={ingredient.servingMultiplier.toFixed(1)}
+                          onChange={(e) => {
+                            const value = parseFloat(e.target.value);
+                            if (!isNaN(value) && value >= 0.1 && value <= 10) {
+                              updateIngredientServing(ingredient.id, value);
+                            }
+                          }}
                           onBlur={(e) => {
                             const value = parseFloat(e.target.value);
                             if (isNaN(value) || value < 0.1) {
