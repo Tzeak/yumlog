@@ -6,10 +6,7 @@ import {
   Image,
   LogOut,
   Settings,
-  Key,
-  Edit,
   Trash,
-  User,
   Plus,
   Minus,
   Target,
@@ -32,10 +29,10 @@ import {
 import {
   ClerkProvider,
   SignIn,
+  SignUp,
   useUser,
   useAuth,
   useClerk,
-  useSignIn,
 } from "@clerk/clerk-react";
 import Yumdog from "./Yumdog";
 import GoldiePortrait from "./GoldiePortrait";
@@ -58,12 +55,12 @@ const TABS = [
 ];
 
 // Helper to log actions to the backend
-async function logUserAction({ phone, action, status }) {
+async function logUserAction({ email, action, status }) {
   try {
     await fetch("/log-action", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone, action, status }),
+      body: JSON.stringify({ email, action, status }),
     });
   } catch (e) {
     // Fail silently
@@ -119,7 +116,7 @@ function AppContent() {
     fat: true,
   });
 
-  const phone = user?.primaryPhoneNumber?.phoneNumber || "unknown user";
+  const email = user?.emailAddresses?.[0]?.emailAddress || "unknown user";
 
   // Swipe handlers
   const tabIndex = TABS.findIndex((tab) => tab.key === activeTab);
@@ -178,12 +175,10 @@ function AppContent() {
         // Get token without including getToken in dependencies
         const token = await getToken();
         if (token) {
-          // For Clerk, we'll use the user ID and phone number as our token
-          const phoneNumber =
-            user?.primaryPhoneNumber?.phoneNumber ||
-            user?.emailAddresses?.[0]?.emailAddress ||
-            "unknown";
-          const authToken = `${user.id}:${phoneNumber}`;
+          // For Clerk, we'll use the user ID and email as our token
+          const userEmail =
+            user?.emailAddresses?.[0]?.emailAddress || "unknown";
+          const authToken = `${user.id}:${userEmail}`;
           config.headers.Authorization = `Bearer ${authToken}`;
           console.log(
             "🔑 Auth token created:",
@@ -217,9 +212,9 @@ function AppContent() {
 
   useEffect(() => {
     if (isSignedIn && user) {
-      logUserAction({ phone, action: "signed in" });
+      logUserAction({ email, action: "signed in" });
     }
-  }, [isSignedIn, user]);
+  }, [isSignedIn, user, email]);
 
   const fetchMeals = async () => {
     try {
@@ -258,7 +253,7 @@ function AppContent() {
 
     setIsAnalyzing(true);
     try {
-      logUserAction({ phone, action: "clicked Analyze Food" });
+      logUserAction({ email, action: "clicked Analyze Food" });
       let data;
 
       if (selectedImage) {
@@ -287,12 +282,12 @@ function AppContent() {
       setAnalysis(data.data.analysis);
       initializeEditableIngredients(data.data.analysis);
       // Don't fetch meals here since we haven't saved yet
-      logUserAction({ phone, action: "analyzeFood success" });
+      logUserAction({ email, action: "analyzeFood success" });
     } catch (error) {
       console.error("Error analyzing food:", error);
       alert("Failed to analyze food. Please try again.");
       logUserAction({
-        phone,
+        email,
         action: "analyzeFood error",
         status: error?.response?.status || 500,
       });
@@ -303,13 +298,13 @@ function AppContent() {
 
   const deleteMeal = async (mealId) => {
     try {
-      logUserAction({ phone, action: `deleteMeal ${mealId}` });
+      logUserAction({ email, action: `deleteMeal ${mealId}` });
       await api.delete(`/meals/${mealId}`);
       await fetchMeals();
     } catch (error) {
       console.error("Error deleting meal:", error);
       logUserAction({
-        phone,
+        email,
         action: "deleteMeal error",
         status: error?.response?.status || 500,
       });
@@ -317,7 +312,7 @@ function AppContent() {
   };
 
   const resetUpload = () => {
-    logUserAction({ phone, action: "used Reset Upload" });
+    logUserAction({ email, action: "used Reset Upload" });
     setSelectedImage(null);
     setImagePreview(null);
     setAnalysis(null);
@@ -510,7 +505,7 @@ function AppContent() {
     if (!analysis || editableIngredients.length === 0) return;
 
     try {
-      logUserAction({ phone, action: "clicked Save Meal" });
+      logUserAction({ email, action: "clicked Save Meal" });
       const totals = getUpdatedTotals();
 
       // Create updated analysis with modified ingredients
@@ -579,12 +574,12 @@ function AppContent() {
         setShowSuccessMessage(false);
         setLastSavedMeal(null);
       }, 5000);
-      logUserAction({ phone, action: "saveMeal success" });
+      logUserAction({ email, action: "saveMeal success" });
     } catch (error) {
       console.error("Error saving meal with modifications:", error);
       alert("Failed to save meal modifications. Please try again.");
       logUserAction({
-        phone,
+        email,
         action: "saveMeal error",
         status: error?.response?.status || 500,
       });
@@ -727,7 +722,7 @@ function AppContent() {
 
     setIsLoadingGoalProgress(true);
     try {
-      logUserAction({ phone, action: "analyzeGoalProgress" });
+      logUserAction({ email, action: "analyzeGoalProgress" });
 
       const response = await api.post("/analyze-goal", {
         goalId: selectedGoalId,
@@ -750,11 +745,11 @@ function AppContent() {
       setGoalAnalysis(response.data.analysis);
       setGoalStats(response.data.stats);
       setRelevantMeals(response.data.relevantMeals || []);
-      logUserAction({ phone, action: "analyzeGoalProgress success" });
+      logUserAction({ email, action: "analyzeGoalProgress success" });
     } catch (error) {
       console.error("Error analyzing goal progress:", error);
       logUserAction({
-        phone,
+        email,
         action: "analyzeGoalProgress error",
         status: error?.response?.status || 500,
       });
@@ -796,7 +791,7 @@ function AppContent() {
 
     setIsLoadingTodayRecommendation(true);
     try {
-      logUserAction({ phone, action: "analyzeTodayRecommendation" });
+      logUserAction({ email, action: "analyzeTodayRecommendation" });
 
       const response = await api.post("/analyze-today", {
         goalId: selectedGoalId,
@@ -815,11 +810,11 @@ function AppContent() {
       localStorage.setItem("yumlog_today_cache", JSON.stringify(newCache));
 
       setTodayRecommendation(response.data.recommendation);
-      logUserAction({ phone, action: "analyzeTodayRecommendation success" });
+      logUserAction({ email, action: "analyzeTodayRecommendation success" });
     } catch (error) {
       console.error("Error analyzing today's recommendation:", error);
       logUserAction({
-        phone,
+        email,
         action: "analyzeTodayRecommendation error",
         status: error?.response?.status || 500,
       });
@@ -1090,7 +1085,7 @@ function AppContent() {
 
     setIsReanalyzing(true);
     try {
-      logUserAction({ phone, action: "reanalyzeWithIngredients" });
+      logUserAction({ email, action: "reanalyzeWithIngredients" });
       // Build comprehensive ingredient notes including serving adjustments
       let comprehensiveNotes = ingredientEditText.trim();
 
@@ -1143,12 +1138,12 @@ function AppContent() {
       setIngredientEditText("");
       setHasUnanalyzedChanges(false);
       // Don't fetch meals here since we haven't saved yet
-      logUserAction({ phone, action: "reanalyzeWithIngredients success" });
+      logUserAction({ email, action: "reanalyzeWithIngredients success" });
     } catch (error) {
       console.error("Error reanalyzing food:", error);
       alert("Failed to reanalyze food. Please try again.");
       logUserAction({
-        phone,
+        email,
         action: "reanalyzeWithIngredients error",
         status: error?.response?.status || 500,
       });
@@ -1221,7 +1216,7 @@ function AppContent() {
           <div
             style={{ display: "flex", flexDirection: "column", gap: "16px" }}
           >
-            <SignInWithPasskeyButton />
+            <SignIn />
 
             <div
               style={{
@@ -1239,32 +1234,7 @@ function AppContent() {
               <div style={{ flex: 1, height: "1px", background: "#ddd" }}></div>
             </div>
 
-            <button
-              onClick={() => setShowSignInModal(true)}
-              style={{
-                padding: "12px 24px",
-                background: "#667eea",
-                color: "white",
-                border: "none",
-                borderRadius: "8px",
-                fontSize: "16px",
-                cursor: "pointer",
-                transition: "all 0.2s ease",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "8px",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = "#5a6fd8";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "#667eea";
-              }}
-            >
-              <User size={20} />
-              Sign in with Phone Number
-            </button>
+            <SignUp />
           </div>
         </div>
 
@@ -3414,7 +3384,7 @@ function AppContent() {
               }}
             >
               <Settings size={16} />
-              <span>{user?.primaryPhoneNumber?.phoneNumber || "User"}</span>
+              <span>{user?.emailAddresses?.[0]?.emailAddress || "User"}</span>
             </div>
             <button
               className="btn btn-secondary"
@@ -3532,24 +3502,23 @@ function AppContent() {
 
             <div style={{ marginBottom: "30px" }}>
               <h3 style={{ marginBottom: "16px", color: "#333" }}>
-                🔐 Passkey Management
+                🔐 Account Management
               </h3>
               <p style={{ marginBottom: "20px", color: "#666" }}>
-                Passkeys provide secure, passwordless authentication using your
-                device's biometrics or PIN.
+                Authentication is now handled via email and password for
+                improved security and ease of use.
               </p>
 
               <div style={{ marginBottom: "20px" }}>
-                <CreatePasskeyButton />
+                <p>
+                  You can manage your account settings and password in your
+                  Clerk dashboard.
+                </p>
+                <p>
+                  To change your email or update your password, please sign out
+                  and use the authentication options.
+                </p>
               </div>
-
-              <div style={{ marginBottom: "20px" }}>
-                <SignInWithPasskeyButton />
-              </div>
-            </div>
-
-            <div style={{ borderTop: "1px solid #eee", paddingTop: "20px" }}>
-              <PasskeyList />
             </div>
           </div>
         </div>
@@ -3558,308 +3527,7 @@ function AppContent() {
   );
 }
 
-// Passkey Management Components
-function CreatePasskeyButton() {
-  const { user } = useUser();
-
-  const createClerkPasskey = async () => {
-    if (!user) return;
-
-    try {
-      await user?.createPasskey();
-    } catch (err) {
-      console.error("Error:", JSON.stringify(err, null, 2));
-    }
-  };
-
-  return (
-    <button
-      className="btn btn-primary"
-      onClick={createClerkPasskey}
-      style={{ marginBottom: "16px" }}
-    >
-      <Key size={16} style={{ marginRight: "8px" }} />
-      Create a passkey
-    </button>
-  );
-}
-
-function SignInWithPasskeyButton() {
-  const { signIn } = useSignIn();
-  const { isSignedIn } = useUser();
-  const { setActive } = useClerk();
-
-  const signInWithPasskey = async () => {
-    // Don't try to sign in if already signed in
-    if (isSignedIn) {
-      console.log("User is already signed in");
-      return;
-    }
-
-    try {
-      const signInAttempt = await signIn?.authenticateWithPasskey({
-        flow: "discoverable",
-      });
-
-      if (signInAttempt?.status === "complete") {
-        console.log("Passkey authentication successful");
-        // Properly activate the session
-        await setActive({ session: signInAttempt.createdSessionId });
-      } else {
-        console.log("Sign-in attempt status:", signInAttempt?.status);
-      }
-    } catch (err) {
-      // Handle specific error cases
-      if (err.errors && err.errors.some((e) => e.code === "session_exists")) {
-        console.log(
-          "User is already signed in - this is expected after successful authentication"
-        );
-        // Try to refresh the session
-        try {
-          await setActive();
-        } catch (refreshError) {
-          console.error("Error refreshing session:", refreshError);
-        }
-      } else {
-        console.error(
-          "Passkey authentication error:",
-          JSON.stringify(err, null, 2)
-        );
-      }
-    }
-  };
-
-  // Don't show the button if user is already signed in
-  if (isSignedIn) {
-    return null;
-  }
-
-  return (
-    <button
-      className="btn btn-primary"
-      onClick={signInWithPasskey}
-      style={{ marginBottom: "16px" }}
-    >
-      <Key size={16} style={{ marginRight: "8px" }} />
-      Sign in with a passkey
-    </button>
-  );
-}
-
-function PasskeyList() {
-  const { user } = useUser();
-  const { passkeys } = user || {};
-  const [editingId, setEditingId] = useState(null);
-  const [newName, setNewName] = useState("");
-  const [success, setSuccess] = useState("");
-
-  const startEditing = (passkey) => {
-    setEditingId(passkey.id);
-    setNewName(passkey.name || "");
-    setSuccess("");
-  };
-
-  const cancelEditing = () => {
-    setEditingId(null);
-    setNewName("");
-    setSuccess("");
-  };
-
-  const saveEdit = async () => {
-    try {
-      const passkeyToUpdate = passkeys?.find((pk) => pk.id === editingId);
-      await passkeyToUpdate?.update({ name: newName });
-      setSuccess("Passkey renamed successfully!");
-      setEditingId(null);
-      setNewName("");
-      setTimeout(() => setSuccess(""), 3000);
-    } catch (err) {
-      console.error("Error:", JSON.stringify(err, null, 2));
-      setSuccess("Error renaming passkey");
-      setTimeout(() => setSuccess(""), 3000);
-    }
-  };
-
-  const deletePasskey = async (passkeyId) => {
-    try {
-      const passkeyToDelete = passkeys?.find((pk) => pk.id === passkeyId);
-      await passkeyToDelete?.delete();
-      setSuccess("Passkey deleted successfully!");
-      setTimeout(() => setSuccess(""), 3000);
-    } catch (err) {
-      console.error("Error:", JSON.stringify(err, null, 2));
-      setSuccess("Error deleting passkey");
-      setTimeout(() => setSuccess(""), 3000);
-    }
-  };
-
-  if (!passkeys || passkeys.length === 0) {
-    return (
-      <div
-        style={{
-          textAlign: "center",
-          padding: "20px",
-          color: "#666",
-          background: "#f8f9fa",
-          borderRadius: "8px",
-        }}
-      >
-        <Key size={32} style={{ marginBottom: "8px", opacity: 0.5 }} />
-        <p>No passkeys set up yet. Create one to get started!</p>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ marginTop: "20px" }}>
-      <h4 style={{ marginBottom: "16px", color: "#333" }}>Your Passkeys</h4>
-
-      {success && (
-        <div
-          style={{
-            padding: "8px 12px",
-            marginBottom: "16px",
-            borderRadius: "6px",
-            background: success.includes("Error") ? "#f8d7da" : "#d4edda",
-            color: success.includes("Error") ? "#721c24" : "#155724",
-            fontSize: "14px",
-          }}
-        >
-          {success}
-        </div>
-      )}
-
-      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-        {passkeys?.map((pk) => (
-          <div
-            key={pk.id}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "16px",
-              background: "#f8f9fa",
-              borderRadius: "8px",
-              border: "1px solid #e9ecef",
-            }}
-          >
-            <div style={{ flex: 1 }}>
-              {editingId === pk.id ? (
-                <div
-                  style={{ display: "flex", alignItems: "center", gap: "8px" }}
-                >
-                  <input
-                    type="text"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    style={{
-                      padding: "6px 8px",
-                      borderRadius: "4px",
-                      border: "1px solid #ddd",
-                      fontSize: "14px",
-                      flex: 1,
-                    }}
-                    placeholder="Enter passkey name"
-                  />
-                  <button
-                    onClick={saveEdit}
-                    style={{
-                      padding: "6px 8px",
-                      background: "#28a745",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "4px",
-                      cursor: "pointer",
-                      fontSize: "12px",
-                    }}
-                  >
-                    Save
-                  </button>
-                  <button
-                    onClick={cancelEditing}
-                    style={{
-                      padding: "6px 8px",
-                      background: "#6c757d",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "4px",
-                      cursor: "pointer",
-                      fontSize: "12px",
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              ) : (
-                <div>
-                  <div
-                    style={{
-                      fontSize: "16px",
-                      fontWeight: "500",
-                      color: "#333",
-                      marginBottom: "4px",
-                    }}
-                  >
-                    {pk.name || "Unnamed Passkey"}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: "12px",
-                      color: "#6c757d",
-                    }}
-                  >
-                    ID: {pk.id}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {editingId !== pk.id && (
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button
-                  onClick={() => startEditing(pk)}
-                  style={{
-                    padding: "6px 8px",
-                    background: "#007bff",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "4px",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "4px",
-                    fontSize: "12px",
-                  }}
-                >
-                  <Edit size={12} />
-                  Edit
-                </button>
-                <button
-                  onClick={() => deletePasskey(pk.id)}
-                  style={{
-                    padding: "6px 8px",
-                    background: "#dc3545",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "4px",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "4px",
-                    fontSize: "12px",
-                  }}
-                >
-                  <Trash size={12} />
-                  Delete
-                </button>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+// Authentication Components (Email/Password)
 
 // Main App component with ClerkProvider
 function App() {

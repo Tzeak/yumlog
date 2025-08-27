@@ -36,6 +36,8 @@ app.use(
       "http://localhost:3000",
       "https://yumlog.tzeak.com",
       "https://www.yumlog.tzeak.com",
+      "https://yummlog.com",
+      "https://www.yummlog.com",
     ],
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -95,23 +97,23 @@ const authenticateUser = async (req, res, next) => {
     const token = authHeader.substring(7);
     console.log("🔑 Token received:", token.substring(0, 20) + "...");
 
-    // For now, we'll use a simple token format: "user_id:phone_number"
+    // For now, we'll use a simple token format: "user_id:email"
     // In production, you should verify the token with Clerk's API
-    const [userId, phoneNumber] = token.split(":");
+    const [userId, email] = token.split(":");
 
     console.log("👤 User ID:", userId);
-    console.log("📱 Phone/Email:", phoneNumber);
+    console.log("📧 Email:", email);
 
-    if (!userId || !phoneNumber) {
-      console.log("❌ Invalid token format - missing userId or phoneNumber");
+    if (!userId || !email) {
+      console.log("❌ Invalid token format - missing userId or email");
       return res.status(401).json({ error: "Invalid token format" });
     }
 
     // Create or update user in database
-    await createOrUpdateUser(userId, phoneNumber);
+    await createOrUpdateUser(userId, email);
 
     // Add user info to request
-    req.user = { id: userId, phoneNumber };
+    req.user = { id: userId, email };
     console.log("✅ Authentication successful for user:", userId);
     next();
   } catch (error) {
@@ -121,9 +123,9 @@ const authenticateUser = async (req, res, next) => {
 };
 
 // Helper to log actions
-function logAction({ phone, action, status }) {
+function logAction({ email, action, status }) {
   const timestamp = new Date().toISOString();
-  const logLine = `${timestamp} ${phone || "unknown user"} just did ${action}${
+  const logLine = `${timestamp} ${email || "unknown user"} just did ${action}${
     status ? ` [status: ${status}]` : ""
   }\n`;
   const logDir = path.join(__dirname, "../logs");
@@ -770,9 +772,9 @@ app.get("/uploads/:filename", (req, res) => {
 
 // Logging endpoint
 app.post("/log-action", (req, res) => {
-  const { phone, action, status } = req.body;
+  const { email, action, status } = req.body;
   try {
-    logAction({ phone, action, status });
+    logAction({ email, action, status });
     res.status(200).json({ success: true });
   } catch (e) {
     res.status(500).json({ error: "Failed to log action" });
@@ -782,13 +784,10 @@ app.post("/log-action", (req, res) => {
 // Error handling middleware
 app.use((err, req, res, next) => {
   const status = err.status || 500;
-  const phone =
-    req.body?.phone ||
-    req.user?.phoneNumber ||
-    req.query?.phone ||
-    "unknown user";
+  const email =
+    req.body?.email || req.user?.email || req.query?.email || "unknown user";
   const action = `API error at ${req.method} ${req.originalUrl}: ${err.message}`;
-  logAction({ phone, action, status });
+  logAction({ email, action, status });
   res.status(status).json({ error: err.message || "Internal Server Error" });
 });
 

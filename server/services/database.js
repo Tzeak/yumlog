@@ -28,7 +28,7 @@ function initDatabase() {
       const createUsersTableQuery = `
         CREATE TABLE IF NOT EXISTS users (
           id TEXT PRIMARY KEY,
-          phone_number TEXT UNIQUE NOT NULL,
+          email TEXT UNIQUE NOT NULL,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
@@ -74,17 +74,17 @@ function initDatabase() {
 
           // Create meals table if it doesn't exist
           const createMealsTableQuery = `
-            CREATE TABLE IF NOT EXISTS meals (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              user_id TEXT NOT NULL,
-              image_path TEXT,
-              analysis TEXT NOT NULL,
-              note TEXT,
-              timestamp TEXT NOT NULL,
-              created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-              FOREIGN KEY (user_id) REFERENCES users (id)
-            )
-          `;
+          CREATE TABLE IF NOT EXISTS meals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            image_path TEXT,
+            analysis TEXT NOT NULL,
+            note TEXT,
+            timestamp TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+          )
+        `;
 
           db.run(createMealsTableQuery, (err) => {
             if (err) {
@@ -158,14 +158,14 @@ function initDatabase() {
   });
 }
 
-function createOrUpdateUser(userId, phoneNumber) {
+function createOrUpdateUser(userId, email) {
   return new Promise((resolve, reject) => {
     const query = `
-      INSERT OR REPLACE INTO users (id, phone_number, updated_at)
+      INSERT OR REPLACE INTO users (id, email, updated_at)
       VALUES (?, ?, CURRENT_TIMESTAMP)
     `;
 
-    db.run(query, [userId, phoneNumber], function (err) {
+    db.run(query, [userId, email], function (err) {
       if (err) {
         console.error("Error creating/updating user:", err);
         reject(err);

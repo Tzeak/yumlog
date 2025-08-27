@@ -158,7 +158,7 @@ GET    /uploads/:filename    → serve image files
 
 The app now uses Clerk.dev for user authentication:
 
-- Users sign in with their phone number
+- Users sign in with their email address and password
 - Each user has their own private meal log
 - Authentication is handled via JWT tokens
 - User data is stored locally in SQLite
@@ -206,7 +206,6 @@ The app now uses Clerk.dev for user authentication:
 - barcode scanner
 - social / share meals
 - sync with fitness stuff
-- email authentication option
 - user profile customization
 
 ## license
