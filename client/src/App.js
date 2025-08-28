@@ -1802,19 +1802,19 @@ function AppContent() {
                   gap: "12px",
                 }}
               >
-                {editableIngredients.map((ingredient) => (
-                  <div
-                    key={ingredient.id}
-                    style={{
-                      background: "white",
-                      borderRadius: "8px",
-                      padding: "16px",
-                      border:
-                        ingredient.confidence === "user_added"
-                          ? "2px solid #28a745"
-                          : "1px solid #e9ecef",
-                    }}
-                  >
+                {editableIngredients.map((ingredient, index) => (
+                  <React.Fragment key={ingredient.id}>
+                    <div
+                      style={{
+                        background: "white",
+                        borderRadius: "8px",
+                        padding: "16px",
+                        border:
+                          ingredient.confidence === "user_added"
+                            ? "2px solid #28a745"
+                            : "1px solid #e9ecef",
+                      }}
+                    >
                     <div
                       style={{
                         display: "flex",
@@ -2114,6 +2114,28 @@ function AppContent() {
                       </div>
                     </div>
                   </div>
+                  
+                  {/* AdSense Ad Unit - Show after every 3 ingredients */}
+                  {(index + 1) % 3 === 0 && (
+                    <div 
+                      style={{ marginTop: "16px", marginBottom: "16px" }}
+                      ref={(el) => {
+                        if (el && typeof window !== 'undefined' && window.adsbygoogle) {
+                          window.adsbygoogle.push({});
+                        }
+                      }}
+                    >
+                      <ins 
+                        className="adsbygoogle"
+                        style={{ display: "block" }}
+                        data-ad-format="fluid"
+                        data-ad-layout-key="-gw-3+1f-3d+2z"
+                        data-ad-client="ca-pub-3121230953653374"
+                        data-ad-slot="9642404265"
+                      />
+                    </div>
+                  )}
+                </React.Fragment>
                 ))}
               </div>
             )}
