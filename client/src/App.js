@@ -28,8 +28,8 @@ import {
 } from "recharts";
 import {
   ClerkProvider,
-  SignIn,
-  SignUp,
+  SignInButton,
+  SignUpButton,
   useUser,
   useAuth,
   useClerk,
@@ -73,7 +73,7 @@ function AppContent() {
   const { signOut } = useClerk();
   const [activeTab, setActiveTab] = useState("upload");
   const [showSettings, setShowSettings] = useState(false);
-  const [showSignInModal, setShowSignInModal] = useState(false);
+
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -1216,7 +1216,33 @@ function AppContent() {
           <div
             style={{ display: "flex", flexDirection: "column", gap: "16px" }}
           >
-            <SignIn />
+            <SignInButton mode="modal">
+              <button
+                style={{
+                  padding: "12px 24px",
+                  background: "#667eea",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  fontSize: "16px",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
+                  width: "100%",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "#5a6fd8";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "#667eea";
+                }}
+              >
+                Sign In
+              </button>
+            </SignInButton>
 
             <div
               style={{
@@ -1234,78 +1260,35 @@ function AppContent() {
               <div style={{ flex: 1, height: "1px", background: "#ddd" }}></div>
             </div>
 
-            <SignUp />
-          </div>
-        </div>
-
-        {/* Sign In Modal */}
-        {showSignInModal && (
-          <div
-            style={{
-              position: "fixed",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: "rgba(0, 0, 0, 0.5)",
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              zIndex: 1000,
-              padding: "20px",
-            }}
-            onClick={(e) => {
-              // Close modal when clicking outside
-              if (e.target === e.currentTarget) {
-                setShowSignInModal(false);
-              }
-            }}
-            onKeyDown={(e) => {
-              // Close modal when pressing Escape
-              if (e.key === "Escape") {
-                setShowSignInModal(false);
-              }
-            }}
-            tabIndex={0}
-          >
-            <div style={{ position: "relative" }}>
+            <SignUpButton mode="modal">
               <button
-                onClick={() => setShowSignInModal(false)}
                 style={{
-                  position: "absolute",
-                  top: "-20px",
-                  right: "-20px",
-                  background: "rgba(255, 255, 255, 0.9)",
+                  padding: "12px 24px",
+                  background: "#28a745",
+                  color: "white",
                   border: "none",
-                  borderRadius: "50%",
-                  width: "40px",
-                  height: "40px",
+                  borderRadius: "8px",
+                  fontSize: "16px",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  cursor: "pointer",
-                  fontSize: "20px",
-                  color: "#666",
-                  fontWeight: "bold",
-                  boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
-                  zIndex: 1001,
-                  transition: "all 0.2s ease",
+                  gap: "8px",
+                  width: "100%",
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "rgba(255, 255, 255, 1)";
-                  e.currentTarget.style.transform = "scale(1.1)";
+                  e.currentTarget.style.background = "#218838";
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.9)";
-                  e.currentTarget.style.transform = "scale(1)";
+                  e.currentTarget.style.background = "#28a745";
                 }}
               >
-                ×
+                Sign Up
               </button>
-              <SignIn />
-            </div>
+            </SignUpButton>
           </div>
-        )}
+        </div>
       </div>
     );
   }
