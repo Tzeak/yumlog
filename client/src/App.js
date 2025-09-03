@@ -2,31 +2,41 @@ import React, { useState, useEffect } from "react";
 import {
   Upload,
   Trash2,
-  BarChart3,
   History,
   Image,
   LogOut,
   Settings,
-  Key,
-  Edit,
   Trash,
-  User,
   Plus,
   Minus,
+  Target,
 } from "lucide-react";
 import axios from "axios";
 import { format } from "date-fns";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Legend,
+} from "recharts";
 import {
   ClerkProvider,
-  SignIn,
+  SignInButton,
+  SignUpButton,
   useUser,
   useAuth,
   useClerk,
-  useSignIn,
 } from "@clerk/clerk-react";
 import Yumdog from "./Yumdog";
 import GoldiePortrait from "./GoldiePortrait";
+import GoalManager from "./GoalManager";
 import { useSwipeable } from "react-swipeable";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -41,16 +51,16 @@ const api = axios.create({
 const TABS = [
   { key: "upload", label: "Add Meal", icon: Upload },
   { key: "history", label: "History", icon: History },
-  { key: "analytics", label: "Analytics", icon: BarChart3 },
+  { key: "goals", label: "Goals", icon: Target },
 ];
 
 // Helper to log actions to the backend
-async function logUserAction({ phone, action, status }) {
+async function logUserAction({ email, action, status }) {
   try {
     await fetch("/log-action", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone, action, status }),
+      body: JSON.stringify({ email, action, status }),
     });
   } catch (e) {
     // Fail silently
@@ -63,28 +73,16 @@ function AppContent() {
   const { signOut } = useClerk();
   const [activeTab, setActiveTab] = useState("upload");
   const [showSettings, setShowSettings] = useState(false);
-  const [showSignInModal, setShowSignInModal] = useState(false);
+
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [meals, setMeals] = useState([]);
   const [analysis, setAnalysis] = useState(null);
-  const [note, setNote] = useState("");
   const [mealDescription, setMealDescription] = useState("");
-  const [hasPhoto, setHasPhoto] = useState(false);
 
   // New state for editable ingredients
   const [editableIngredients, setEditableIngredients] = useState([]);
-  const [newIngredient, setNewIngredient] = useState({
-    name: "",
-    quantity: "",
-    calories: 0,
-    protein: 0,
-    carbs: 0,
-    fat: 0,
-    fiber: 0,
-    sugar: 0,
-  });
 
   // State for expanded meals in history
   const [expandedMeals, setExpandedMeals] = useState(new Set());
@@ -99,7 +97,26 @@ function AppContent() {
   const [lastSavedMeal, setLastSavedMeal] = useState(null);
   const [swipeDirection, setSwipeDirection] = useState(0); // -1 for left, 1 for right
 
-  const phone = user?.primaryPhoneNumber?.phoneNumber || "unknown user";
+  // New state for goals
+  const [goalAnalysis, setGoalAnalysis] = useState(null);
+  const [isLoadingGoalProgress, setIsLoadingGoalProgress] = useState(false);
+  const [selectedGoalId, setSelectedGoalId] = useState(null);
+  const [selectedGoal, setSelectedGoal] = useState(null);
+  const [goalStats, setGoalStats] = useState(null);
+  const [relevantMeals, setRelevantMeals] = useState([]);
+  const [todayRecommendation, setTodayRecommendation] = useState(null);
+  const [isLoadingTodayRecommendation, setIsLoadingTodayRecommendation] =
+    useState(false);
+  const [analysisCache, setAnalysisCache] = useState({});
+  const [todayRecommendationCache, setTodayRecommendationCache] = useState({});
+  const [visibleMacros, setVisibleMacros] = useState({
+    calories: true,
+    protein: true,
+    carbs: true,
+    fat: true,
+  });
+
+  const email = user?.emailAddresses?.[0]?.emailAddress || "unknown user";
 
   // Swipe handlers
   const tabIndex = TABS.findIndex((tab) => tab.key === activeTab);
@@ -127,8 +144,8 @@ function AppContent() {
         return renderUploadTab();
       case "history":
         return renderHistoryTab();
-      case "analytics":
-        return renderAnalyticsTab();
+      case "goals":
+        return renderGoalsTab();
       default:
         return null;
     }
@@ -158,12 +175,10 @@ function AppContent() {
         // Get token without including getToken in dependencies
         const token = await getToken();
         if (token) {
-          // For Clerk, we'll use the user ID and phone number as our token
-          const phoneNumber =
-            user?.primaryPhoneNumber?.phoneNumber ||
-            user?.emailAddresses?.[0]?.emailAddress ||
-            "unknown";
-          const authToken = `${user.id}:${phoneNumber}`;
+          // For Clerk, we'll use the user ID and email as our token
+          const userEmail =
+            user?.emailAddresses?.[0]?.emailAddress || "unknown";
+          const authToken = `${user.id}:${userEmail}`;
           config.headers.Authorization = `Bearer ${authToken}`;
           console.log(
             "🔑 Auth token created:",
@@ -189,6 +204,44 @@ function AppContent() {
     }
   }, [isSignedIn]);
 
+  // Initialize AdSense ads when ingredients are rendered
+  useEffect(() => {
+    if (editableIngredients.length > 0) {
+      const timer = setTimeout(() => {
+        if (typeof window !== 'undefined' && window.adsbygoogle) {
+          try {
+            // Find all uninitialized ad elements
+            const adElements = document.querySelectorAll('ins.adsbygoogle:not([data-ad-status])');
+            console.log('Found', adElements.length, 'ad elements to initialize');
+            adElements.forEach((element) => {
+              try {
+                window.adsbygoogle.push({});
+                console.log('Ad initialized successfully');
+                
+                // Check ad status after a delay
+                setTimeout(() => {
+                  const status = element.getAttribute('data-ad-status');
+                  console.log('Ad status:', status);
+                  if (status === 'unfilled') {
+                    console.log('Ad slot unfilled - might be due to ad blockers or account status');
+                  }
+                }, 2000);
+              } catch (error) {
+                console.log('Ad initialization error:', error);
+              }
+            });
+          } catch (error) {
+            console.log('AdSense initialization error:', error);
+          }
+        } else {
+          console.log('AdSense script not loaded yet');
+        }
+      }, 500); // Wait 500ms for DOM to be ready
+
+      return () => clearTimeout(timer);
+    }
+  }, [editableIngredients]);
+
   useEffect(() => {
     if (isSignedIn) {
       fetchMeals();
@@ -197,9 +250,9 @@ function AppContent() {
 
   useEffect(() => {
     if (isSignedIn && user) {
-      logUserAction({ phone, action: "signed in" });
+      logUserAction({ email, action: "signed in" });
     }
-  }, [isSignedIn, user]);
+  }, [isSignedIn, user, email]);
 
   const fetchMeals = async () => {
     try {
@@ -219,7 +272,6 @@ function AppContent() {
     const file = event.target.files[0];
     if (file) {
       setSelectedImage(file);
-      setHasPhoto(true);
 
       // Create preview URL
       const reader = new FileReader();
@@ -231,7 +283,6 @@ function AppContent() {
       // If no file selected, reset the input
       setSelectedImage(null);
       setImagePreview(null);
-      setHasPhoto(false);
     }
   };
 
@@ -240,7 +291,7 @@ function AppContent() {
 
     setIsAnalyzing(true);
     try {
-      logUserAction({ phone, action: "clicked Analyze Food" });
+      logUserAction({ email, action: "clicked Analyze Food" });
       let data;
 
       if (selectedImage) {
@@ -269,12 +320,12 @@ function AppContent() {
       setAnalysis(data.data.analysis);
       initializeEditableIngredients(data.data.analysis);
       // Don't fetch meals here since we haven't saved yet
-      logUserAction({ phone, action: "analyzeFood success" });
+      logUserAction({ email, action: "analyzeFood success" });
     } catch (error) {
       console.error("Error analyzing food:", error);
       alert("Failed to analyze food. Please try again.");
       logUserAction({
-        phone,
+        email,
         action: "analyzeFood error",
         status: error?.response?.status || 500,
       });
@@ -285,13 +336,13 @@ function AppContent() {
 
   const deleteMeal = async (mealId) => {
     try {
-      logUserAction({ phone, action: `deleteMeal ${mealId}` });
+      logUserAction({ email, action: `deleteMeal ${mealId}` });
       await api.delete(`/meals/${mealId}`);
       await fetchMeals();
     } catch (error) {
       console.error("Error deleting meal:", error);
       logUserAction({
-        phone,
+        email,
         action: "deleteMeal error",
         status: error?.response?.status || 500,
       });
@@ -299,7 +350,7 @@ function AppContent() {
   };
 
   const resetUpload = () => {
-    logUserAction({ phone, action: "used Reset Upload" });
+    logUserAction({ email, action: "used Reset Upload" });
     setSelectedImage(null);
     setImagePreview(null);
     setAnalysis(null);
@@ -308,7 +359,6 @@ function AppContent() {
     setIngredientEditText("");
     setIsReanalyzing(false);
     setHasUnanalyzedChanges(false);
-    setHasPhoto(false);
     // Reset the file input
     const fileInput = document.getElementById("image-upload");
     if (fileInput) {
@@ -446,11 +496,54 @@ function AppContent() {
     return `${originalQuantity} × ${servingMultiplier.toFixed(1)}`;
   };
 
+  const generateMealTitle = (foods, note) => {
+    if (!foods || foods.length === 0) {
+      return note || "Meal";
+    }
+
+    // If there's a user note, use it as the primary title
+    if (note && note.trim()) {
+      return note.trim();
+    }
+
+    // Generate title from food items
+    const foodNames = foods.map((food) => food.name).filter(Boolean);
+
+    if (foodNames.length === 0) {
+      return "Meal";
+    }
+
+    if (foodNames.length === 1) {
+      return foodNames[0];
+    }
+
+    if (foodNames.length === 2) {
+      return `${foodNames[0]} & ${foodNames[1]}`;
+    }
+
+    // For 3 or more items, use the first 2 and add "& more"
+    return `${foodNames[0]}, ${foodNames[1]} & more`;
+  };
+
+  const getGoalComplianceLabel = (score) => {
+    if (score >= 90) return "Exceeds Goals";
+    if (score >= 75) return "Meets Goals";
+    if (score >= 50) return "Partially Meets Goals";
+    return "Does Not Meet Goals";
+  };
+
+  const getGoalComplianceColor = (score) => {
+    if (score >= 90) return "#28a745"; // Green
+    if (score >= 75) return "#17a2b8"; // Blue
+    if (score >= 50) return "#ffc107"; // Yellow
+    return "#dc3545"; // Red
+  };
+
   const saveMealWithModifications = async () => {
     if (!analysis || editableIngredients.length === 0) return;
 
     try {
-      logUserAction({ phone, action: "clicked Save Meal" });
+      logUserAction({ email, action: "clicked Save Meal" });
       const totals = getUpdatedTotals();
 
       // Create updated analysis with modified ingredients
@@ -463,6 +556,10 @@ function AppContent() {
         total_fat: totals.fat,
         total_fiber: totals.fiber,
         total_sugar: totals.sugar,
+        meal_title: generateMealTitle(
+          editableIngredients,
+          mealDescription.trim()
+        ),
       };
 
       let response;
@@ -515,12 +612,12 @@ function AppContent() {
         setShowSuccessMessage(false);
         setLastSavedMeal(null);
       }, 5000);
-      logUserAction({ phone, action: "saveMeal success" });
+      logUserAction({ email, action: "saveMeal success" });
     } catch (error) {
       console.error("Error saving meal with modifications:", error);
       alert("Failed to save meal modifications. Please try again.");
       logUserAction({
-        phone,
+        email,
         action: "saveMeal error",
         status: error?.response?.status || 500,
       });
@@ -561,6 +658,462 @@ function AppContent() {
     ].filter((item) => item.value > 0);
   };
 
+  const getTimeSeriesData = () => {
+    // Group meals by date and calculate daily totals
+    const dailyData = {};
+
+    meals.forEach((meal) => {
+      const date = format(new Date(meal.createdAt), "MMM dd");
+      if (!dailyData[date]) {
+        dailyData[date] = {
+          date,
+          calories: 0,
+          protein: 0,
+          carbs: 0,
+          fat: 0,
+        };
+      }
+
+      dailyData[date].calories += meal.analysis.total_calories || 0;
+      dailyData[date].protein += meal.analysis.total_protein || 0;
+      dailyData[date].carbs += meal.analysis.total_carbs || 0;
+      dailyData[date].fat += meal.analysis.total_fat || 0;
+    });
+
+    // Convert to array and sort by date
+    const timeSeriesData = Object.values(dailyData)
+      .sort((a, b) => new Date(a.date) - new Date(b.date))
+      .slice(-7); // Show last 7 days
+
+    // Add target values if a goal is selected
+    if (selectedGoal?.targets) {
+      timeSeriesData.forEach((day) => {
+        if (selectedGoal.targets.calories)
+          day.calorieTarget = selectedGoal.targets.calories;
+        if (selectedGoal.targets.protein)
+          day.proteinTarget = selectedGoal.targets.protein;
+        if (selectedGoal.targets.carbs)
+          day.carbsTarget = selectedGoal.targets.carbs;
+        if (selectedGoal.targets.fat) day.fatTarget = selectedGoal.targets.fat;
+      });
+    }
+
+    return timeSeriesData;
+  };
+
+  const formatApproximateMacro = (value) => {
+    if (value === null || value === undefined || isNaN(value)) {
+      return "~0";
+    }
+    const rounded = Math.round(value);
+    return `~${rounded}`;
+  };
+
+  const toggleMacro = (macro) => {
+    setVisibleMacros((prev) => ({
+      ...prev,
+      [macro]: !prev[macro],
+    }));
+  };
+
+  const toggleAllMacros = (show) => {
+    setVisibleMacros({
+      calories: show,
+      protein: show,
+      carbs: show,
+      fat: show,
+    });
+  };
+
+  // New function to analyze goals
+  const analyzeGoalProgress = async (forceRefresh = false) => {
+    if (!meals.length || !selectedGoalId) return;
+
+    const cacheKey = generateGoalAnalysisCacheKey(
+      selectedGoalId,
+      meals,
+      selectedGoal?.guidelines
+    );
+
+    // Check if we have cached results (only if not forcing refresh)
+    if (!forceRefresh && analysisCache[cacheKey]) {
+      const cached = analysisCache[cacheKey];
+      const cacheAge = Date.now() - cached.timestamp;
+      const oneDay = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+
+      // Use cache if it's less than 1 day old
+      if (cacheAge < oneDay) {
+        console.log("🎯 Using cached goal analysis");
+        setGoalAnalysis(cached.analysis);
+        setGoalStats(cached.stats);
+        setRelevantMeals(cached.relevantMeals || []);
+        return;
+      } else {
+        console.log("🎯 Cache expired, fetching fresh analysis");
+        // Remove expired cache entry
+        const newCache = { ...analysisCache };
+        delete newCache[cacheKey];
+        setAnalysisCache(newCache);
+        localStorage.setItem("yumlog_analysis_cache", JSON.stringify(newCache));
+      }
+    }
+
+    setIsLoadingGoalProgress(true);
+    try {
+      logUserAction({ email, action: "analyzeGoalProgress" });
+
+      const response = await api.post("/analyze-goal", {
+        goalId: selectedGoalId,
+        meals: meals,
+      });
+
+      console.log("🎯 Goal analysis received:", response.data);
+
+      // Cache the results
+      const cacheData = {
+        analysis: response.data.analysis,
+        stats: response.data.stats,
+        relevantMeals: response.data.relevantMeals || [],
+        timestamp: Date.now(),
+      };
+      const newCache = { ...analysisCache, [cacheKey]: cacheData };
+      setAnalysisCache(newCache);
+      localStorage.setItem("yumlog_analysis_cache", JSON.stringify(newCache));
+
+      setGoalAnalysis(response.data.analysis);
+      setGoalStats(response.data.stats);
+      setRelevantMeals(response.data.relevantMeals || []);
+      logUserAction({ email, action: "analyzeGoalProgress success" });
+    } catch (error) {
+      console.error("Error analyzing goal progress:", error);
+      logUserAction({
+        email,
+        action: "analyzeGoalProgress error",
+        status: error?.response?.status || 500,
+      });
+    } finally {
+      setIsLoadingGoalProgress(false);
+    }
+  };
+
+  // New function to analyze today's meals specifically
+  const analyzeTodayRecommendation = async (forceRefresh = false) => {
+    if (!meals.length || !selectedGoalId) return;
+
+    const cacheKey = generateTodayRecommendationCacheKey(
+      selectedGoalId,
+      meals,
+      selectedGoal?.guidelines
+    );
+
+    // Check if we have cached results (only if not forcing refresh)
+    if (!forceRefresh && todayRecommendationCache[cacheKey]) {
+      const cached = todayRecommendationCache[cacheKey];
+      const cacheAge = Date.now() - cached.timestamp;
+      const oneDay = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+
+      // Use cache if it's less than 1 day old
+      if (cacheAge < oneDay) {
+        console.log("📅 Using cached today's recommendation");
+        setTodayRecommendation(cached.recommendation);
+        return;
+      } else {
+        console.log("📅 Cache expired, fetching fresh recommendation");
+        // Remove expired cache entry
+        const newCache = { ...todayRecommendationCache };
+        delete newCache[cacheKey];
+        setTodayRecommendationCache(newCache);
+        localStorage.setItem("yumlog_today_cache", JSON.stringify(newCache));
+      }
+    }
+
+    setIsLoadingTodayRecommendation(true);
+    try {
+      logUserAction({ email, action: "analyzeTodayRecommendation" });
+
+      const response = await api.post("/analyze-today", {
+        goalId: selectedGoalId,
+        meals: meals,
+      });
+
+      console.log("📅 Today's recommendation received:", response.data);
+
+      // Cache the results
+      const cacheData = {
+        recommendation: response.data.recommendation,
+        timestamp: Date.now(),
+      };
+      const newCache = { ...todayRecommendationCache, [cacheKey]: cacheData };
+      setTodayRecommendationCache(newCache);
+      localStorage.setItem("yumlog_today_cache", JSON.stringify(newCache));
+
+      setTodayRecommendation(response.data.recommendation);
+      logUserAction({ email, action: "analyzeTodayRecommendation success" });
+    } catch (error) {
+      console.error("Error analyzing today's recommendation:", error);
+      logUserAction({
+        email,
+        action: "analyzeTodayRecommendation error",
+        status: error?.response?.status || 500,
+      });
+    } finally {
+      setIsLoadingTodayRecommendation(false);
+    }
+  };
+
+  // Function to evaluate if a meal meets the selected goal
+  const evaluateMealForGoal = (meal) => {
+    if (!selectedGoal) return { compliant: false, score: 0, details: {} };
+
+    // Handle both original meal structure and processed meal structure
+    let protein, carbs, fat;
+
+    if (meal.analysis) {
+      // Original meal structure (from database)
+      protein = meal.analysis.total_protein || 0;
+      carbs = meal.analysis.total_carbs || 0;
+      fat = meal.analysis.total_fat || 0;
+    } else {
+      // Processed meal structure (from backend analysis)
+      protein = meal.protein || 0;
+      carbs = meal.carbs || 0;
+      fat = meal.fat || 0;
+    }
+
+    // If goal has numeric targets, use them for evaluation
+    if (
+      selectedGoal.targets &&
+      (selectedGoal.targets.calories ||
+        selectedGoal.targets.protein ||
+        selectedGoal.targets.carbs ||
+        selectedGoal.targets.fat)
+    ) {
+      const targets = selectedGoal.targets;
+      let score = 100; // Start with perfect score
+      let isCompliant = true;
+      const details = {};
+
+      // Always include macro values in details for display purposes
+      details.calories = {
+        value: meal.analysis?.total_calories || 0,
+        target: targets.calories || null,
+        good: true, // Will be updated below if target exists
+      };
+      details.protein = {
+        value: protein,
+        target: targets.protein || null,
+        good: true, // Will be updated below if target exists
+      };
+      details.carbs = {
+        value: carbs,
+        target: targets.carbs || null,
+        good: true, // Will be updated below if target exists
+      };
+      details.fat = {
+        value: fat,
+        target: targets.fat || null,
+        good: true, // Will be updated below if target exists
+      };
+
+      // Check calories if target exists
+      if (targets.calories) {
+        const mealCalories = meal.analysis?.total_calories || 0;
+        const calorieRatio = mealCalories / targets.calories;
+        const calorieGood = calorieRatio >= 0.8 && calorieRatio <= 1.2; // Within 20% of target
+        details.calories.good = calorieGood;
+        if (!calorieGood) {
+          score -= 20;
+          isCompliant = false;
+        }
+      }
+
+      // Check protein if target exists
+      if (targets.protein) {
+        const proteinRatio = protein / targets.protein;
+        const proteinGood = proteinRatio >= 0.7 && proteinRatio <= 1.3; // Within 30% of target
+        details.protein.good = proteinGood;
+        if (!proteinGood) {
+          score -= 25;
+          isCompliant = false;
+        }
+      }
+
+      // Check carbs if target exists
+      if (targets.carbs) {
+        const carbsGood = carbs <= targets.carbs * 1.2; // Should not exceed target by more than 20%
+        details.carbs.good = carbsGood;
+        if (!carbsGood) {
+          score -= 25;
+          isCompliant = false;
+        }
+      }
+
+      // Check fat if target exists
+      if (targets.fat) {
+        const fatRatio = fat / targets.fat;
+        const fatGood = fatRatio >= 0.7 && fatRatio <= 1.3; // Within 30% of target
+        details.fat.good = fatGood;
+        if (!fatGood) {
+          score -= 25;
+          isCompliant = false;
+        }
+      }
+
+      // Ensure score doesn't go below 0
+      score = Math.max(0, score);
+
+      return {
+        compliant: isCompliant,
+        score: score,
+        details: details,
+      };
+    }
+
+    // Fallback to generic macro balance scoring for goals without numeric targets
+    const totalMacros = protein + carbs + fat;
+    const proteinPercent = totalMacros > 0 ? (protein / totalMacros) * 100 : 0;
+    const carbsPercent = totalMacros > 0 ? (carbs / totalMacros) * 100 : 0;
+    const fatPercent = totalMacros > 0 ? (fat / totalMacros) * 100 : 0;
+
+    let score = 50; // Base score
+    let isCompliant = false;
+
+    // Simple scoring based on macro balance (moderate in all macros)
+    if (totalMacros > 0) {
+      if (
+        proteinPercent >= 15 &&
+        proteinPercent <= 35 &&
+        carbsPercent >= 30 &&
+        carbsPercent <= 60 &&
+        fatPercent >= 20 &&
+        fatPercent <= 50
+      ) {
+        score = 80;
+        isCompliant = true;
+      } else if (
+        proteinPercent >= 10 &&
+        proteinPercent <= 40 &&
+        carbsPercent >= 25 &&
+        carbsPercent <= 65 &&
+        fatPercent >= 15 &&
+        fatPercent <= 55
+      ) {
+        score = 60;
+      } else {
+        score = 30;
+      }
+    }
+
+    return {
+      compliant: isCompliant,
+      score: score,
+      details: {
+        carbs: { value: carbs, good: carbs >= 10 && carbs <= 100 },
+        fat: { value: fat, good: fat >= 5 && fat <= 50 },
+        protein: { value: protein, good: protein >= 5 && protein <= 40 },
+      },
+    };
+  };
+
+  // Load cache from localStorage on component mount
+  useEffect(() => {
+    // Load cache from localStorage
+    const savedAnalysisCache = localStorage.getItem("yumlog_analysis_cache");
+    if (savedAnalysisCache) {
+      try {
+        const parsed = JSON.parse(savedAnalysisCache);
+        setAnalysisCache(parsed);
+      } catch (error) {
+        console.error("Error loading analysis cache:", error);
+      }
+    }
+
+    const savedTodayCache = localStorage.getItem("yumlog_today_cache");
+    if (savedTodayCache) {
+      try {
+        const parsed = JSON.parse(savedTodayCache);
+        setTodayRecommendationCache(parsed);
+      } catch (error) {
+        console.error("Error loading today cache:", error);
+      }
+    }
+  }, []);
+
+  // Generate cache key for goal analysis
+  const generateGoalAnalysisCacheKey = (goalId, meals, guidelines) => {
+    const mealsHash = meals
+      .map((meal) => ({
+        id: meal.id,
+        calories: meal.analysis?.total_calories || 0,
+        protein: meal.analysis?.total_protein || 0,
+        carbs: meal.analysis?.total_carbs || 0,
+        fat: meal.analysis?.total_fat || 0,
+        date: meal.createdAt,
+      }))
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    return `${goalId}_${JSON.stringify(mealsHash)}_${guidelines || ""}`;
+  };
+
+  // Generate cache key for today's recommendation
+  const generateTodayRecommendationCacheKey = (goalId, meals, guidelines) => {
+    const today = new Date();
+    const todayStart = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate()
+    );
+    const todayEnd = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate() + 1
+    );
+
+    const todayMeals = meals
+      .filter((meal) => {
+        const mealDate = new Date(meal.createdAt);
+        return mealDate >= todayStart && mealDate < todayEnd;
+      })
+      .map((meal) => ({
+        id: meal.id,
+        calories: meal.analysis?.total_calories || 0,
+        protein: meal.analysis?.total_protein || 0,
+        carbs: meal.analysis?.total_carbs || 0,
+        fat: meal.analysis?.total_fat || 0,
+        date: meal.createdAt,
+      }))
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    return `${goalId}_today_${JSON.stringify(todayMeals)}_${guidelines || ""}`;
+  };
+
+  // Load goal analysis when goals tab is active and meals are available
+  useEffect(() => {
+    if (activeTab === "goals" && meals.length > 0 && selectedGoalId) {
+      if (!goalAnalysis) {
+        analyzeGoalProgress(false); // Use cache on initial load
+      }
+      if (!todayRecommendation) {
+        analyzeTodayRecommendation(false); // Use cache on initial load
+      }
+    }
+  }, [activeTab, meals, selectedGoalId]);
+
+  // Reassess when goal changes
+  useEffect(() => {
+    if (activeTab === "goals" && meals.length > 0 && selectedGoalId) {
+      // Clear previous analysis when goal changes
+      setGoalAnalysis(null);
+      setTodayRecommendation(null);
+      setGoalStats(null);
+      setRelevantMeals([]);
+
+      // Trigger new analysis for the selected goal (use cache if available)
+      analyzeGoalProgress(false);
+      analyzeTodayRecommendation(false);
+    }
+  }, [selectedGoalId]);
+
   const reanalyzeWithIngredients = async () => {
     if (
       !ingredientEditText.trim() ||
@@ -570,7 +1123,7 @@ function AppContent() {
 
     setIsReanalyzing(true);
     try {
-      logUserAction({ phone, action: "reanalyzeWithIngredients" });
+      logUserAction({ email, action: "reanalyzeWithIngredients" });
       // Build comprehensive ingredient notes including serving adjustments
       let comprehensiveNotes = ingredientEditText.trim();
 
@@ -623,12 +1176,12 @@ function AppContent() {
       setIngredientEditText("");
       setHasUnanalyzedChanges(false);
       // Don't fetch meals here since we haven't saved yet
-      logUserAction({ phone, action: "reanalyzeWithIngredients success" });
+      logUserAction({ email, action: "reanalyzeWithIngredients success" });
     } catch (error) {
       console.error("Error reanalyzing food:", error);
       alert("Failed to reanalyze food. Please try again.");
       logUserAction({
-        phone,
+        email,
         action: "reanalyzeWithIngredients error",
         status: error?.response?.status || 500,
       });
@@ -701,7 +1254,33 @@ function AppContent() {
           <div
             style={{ display: "flex", flexDirection: "column", gap: "16px" }}
           >
-            <SignInWithPasskeyButton />
+            <SignInButton mode="modal">
+              <button
+                style={{
+                  padding: "12px 24px",
+                  background: "#667eea",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  fontSize: "16px",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
+                  width: "100%",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "#5a6fd8";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "#667eea";
+                }}
+              >
+                Sign In
+              </button>
+            </SignInButton>
 
             <div
               style={{
@@ -719,103 +1298,35 @@ function AppContent() {
               <div style={{ flex: 1, height: "1px", background: "#ddd" }}></div>
             </div>
 
-            <button
-              onClick={() => setShowSignInModal(true)}
-              style={{
-                padding: "12px 24px",
-                background: "#667eea",
-                color: "white",
-                border: "none",
-                borderRadius: "8px",
-                fontSize: "16px",
-                cursor: "pointer",
-                transition: "all 0.2s ease",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "8px",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = "#5a6fd8";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "#667eea";
-              }}
-            >
-              <User size={20} />
-              Sign in with Phone Number
-            </button>
-          </div>
-        </div>
-
-        {/* Sign In Modal */}
-        {showSignInModal && (
-          <div
-            style={{
-              position: "fixed",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: "rgba(0, 0, 0, 0.5)",
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              zIndex: 1000,
-              padding: "20px",
-            }}
-            onClick={(e) => {
-              // Close modal when clicking outside
-              if (e.target === e.currentTarget) {
-                setShowSignInModal(false);
-              }
-            }}
-            onKeyDown={(e) => {
-              // Close modal when pressing Escape
-              if (e.key === "Escape") {
-                setShowSignInModal(false);
-              }
-            }}
-            tabIndex={0}
-          >
-            <div style={{ position: "relative" }}>
+            <SignUpButton mode="modal">
               <button
-                onClick={() => setShowSignInModal(false)}
                 style={{
-                  position: "absolute",
-                  top: "-20px",
-                  right: "-20px",
-                  background: "rgba(255, 255, 255, 0.9)",
+                  padding: "12px 24px",
+                  background: "#28a745",
+                  color: "white",
                   border: "none",
-                  borderRadius: "50%",
-                  width: "40px",
-                  height: "40px",
+                  borderRadius: "8px",
+                  fontSize: "16px",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  cursor: "pointer",
-                  fontSize: "20px",
-                  color: "#666",
-                  fontWeight: "bold",
-                  boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
-                  zIndex: 1001,
-                  transition: "all 0.2s ease",
+                  gap: "8px",
+                  width: "100%",
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "rgba(255, 255, 255, 1)";
-                  e.currentTarget.style.transform = "scale(1.1)";
+                  e.currentTarget.style.background = "#218838";
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.9)";
-                  e.currentTarget.style.transform = "scale(1)";
+                  e.currentTarget.style.background = "#28a745";
                 }}
               >
-                ×
+                Sign Up
               </button>
-              <SignIn />
-            </div>
+            </SignUpButton>
           </div>
-        )}
+        </div>
       </div>
     );
   }
@@ -916,7 +1427,6 @@ function AppContent() {
                   onClick={() => {
                     setSelectedImage(null);
                     setImagePreview(null);
-                    setHasPhoto(false);
                     // Reset the file input
                     const fileInput = document.getElementById("image-upload");
                     if (fileInput) {
@@ -1065,26 +1575,41 @@ function AppContent() {
               }}
             >
               <div>
-                <div style={{ fontSize: "20px", fontWeight: "bold" }}>
-                  {lastSavedMeal.analysis.total_calories}
+                <div
+                  className="macro-display"
+                  style={{ fontSize: "20px", fontWeight: "bold" }}
+                >
+                  {formatApproximateMacro(
+                    lastSavedMeal.analysis.total_calories
+                  )}
                 </div>
                 <div style={{ fontSize: "12px", opacity: 0.9 }}>Calories</div>
               </div>
               <div>
-                <div style={{ fontSize: "20px", fontWeight: "bold" }}>
-                  {lastSavedMeal.analysis.total_protein}g
+                <div
+                  className="macro-display"
+                  style={{ fontSize: "20px", fontWeight: "bold" }}
+                >
+                  {formatApproximateMacro(lastSavedMeal.analysis.total_protein)}
+                  g
                 </div>
                 <div style={{ fontSize: "12px", opacity: 0.9 }}>Protein</div>
               </div>
               <div>
-                <div style={{ fontSize: "20px", fontWeight: "bold" }}>
-                  {lastSavedMeal.analysis.total_carbs}g
+                <div
+                  className="macro-display"
+                  style={{ fontSize: "20px", fontWeight: "bold" }}
+                >
+                  {formatApproximateMacro(lastSavedMeal.analysis.total_carbs)}g
                 </div>
                 <div style={{ fontSize: "12px", opacity: 0.9 }}>Carbs</div>
               </div>
               <div>
-                <div style={{ fontSize: "20px", fontWeight: "bold" }}>
-                  {lastSavedMeal.analysis.total_fat}g
+                <div
+                  className="macro-display"
+                  style={{ fontSize: "20px", fontWeight: "bold" }}
+                >
+                  {formatApproximateMacro(lastSavedMeal.analysis.total_fat)}g
                 </div>
                 <div style={{ fontSize: "12px", opacity: 0.9 }}>Fat</div>
               </div>
@@ -1178,13 +1703,14 @@ function AppContent() {
                     }}
                   >
                     <div
+                      className="macro-display"
                       style={{
                         fontSize: "24px",
                         fontWeight: "bold",
                         color: "#667eea",
                       }}
                     >
-                      {totals.calories}
+                      {formatApproximateMacro(totals.calories)}
                     </div>
                     <div style={{ fontSize: "14px", color: "#666" }}>
                       Calories
@@ -1200,13 +1726,14 @@ function AppContent() {
                     }}
                   >
                     <div
+                      className="macro-display"
                       style={{
                         fontSize: "24px",
                         fontWeight: "bold",
                         color: "#667eea",
                       }}
                     >
-                      {totals.protein}g
+                      {formatApproximateMacro(totals.protein)}g
                     </div>
                     <div style={{ fontSize: "14px", color: "#666" }}>
                       Protein
@@ -1222,13 +1749,14 @@ function AppContent() {
                     }}
                   >
                     <div
+                      className="macro-display"
                       style={{
                         fontSize: "24px",
                         fontWeight: "bold",
                         color: "#667eea",
                       }}
                     >
-                      {totals.carbs}g
+                      {formatApproximateMacro(totals.carbs)}g
                     </div>
                     <div style={{ fontSize: "14px", color: "#666" }}>Carbs</div>
                   </div>
@@ -1242,13 +1770,14 @@ function AppContent() {
                     }}
                   >
                     <div
+                      className="macro-display"
                       style={{
                         fontSize: "24px",
                         fontWeight: "bold",
                         color: "#667eea",
                       }}
                     >
-                      {totals.fat}g
+                      {formatApproximateMacro(totals.fat)}g
                     </div>
                     <div style={{ fontSize: "14px", color: "#666" }}>Fat</div>
                   </div>
@@ -1311,19 +1840,19 @@ function AppContent() {
                   gap: "12px",
                 }}
               >
-                {editableIngredients.map((ingredient) => (
-                  <div
-                    key={ingredient.id}
-                    style={{
-                      background: "white",
-                      borderRadius: "8px",
-                      padding: "16px",
-                      border:
-                        ingredient.confidence === "user_added"
-                          ? "2px solid #28a745"
-                          : "1px solid #e9ecef",
-                    }}
-                  >
+                {editableIngredients.map((ingredient, index) => (
+                  <React.Fragment key={ingredient.id}>
+                    <div
+                      style={{
+                        background: "white",
+                        borderRadius: "8px",
+                        padding: "16px",
+                        border:
+                          ingredient.confidence === "user_added"
+                            ? "2px solid #28a745"
+                            : "1px solid #e9ecef",
+                      }}
+                    >
                     <div
                       style={{
                         display: "flex",
@@ -1423,13 +1952,14 @@ function AppContent() {
                         }}
                       >
                         <div
+                          className="macro-display"
                           style={{
                             fontSize: "16px",
                             fontWeight: "bold",
                             color: "#667eea",
                           }}
                         >
-                          {ingredient.calories}
+                          {formatApproximateMacro(ingredient.calories)}
                         </div>
                         <div style={{ fontSize: "12px", color: "#666" }}>
                           cal
@@ -1444,13 +1974,14 @@ function AppContent() {
                         }}
                       >
                         <div
+                          className="macro-display"
                           style={{
                             fontSize: "16px",
                             fontWeight: "bold",
                             color: "#667eea",
                           }}
                         >
-                          {ingredient.protein}g
+                          {formatApproximateMacro(ingredient.protein)}g
                         </div>
                         <div style={{ fontSize: "12px", color: "#666" }}>
                           protein
@@ -1465,13 +1996,14 @@ function AppContent() {
                         }}
                       >
                         <div
+                          className="macro-display"
                           style={{
                             fontSize: "16px",
                             fontWeight: "bold",
                             color: "#667eea",
                           }}
                         >
-                          {ingredient.carbs}g
+                          {formatApproximateMacro(ingredient.carbs)}g
                         </div>
                         <div style={{ fontSize: "12px", color: "#666" }}>
                           carbs
@@ -1486,13 +2018,14 @@ function AppContent() {
                         }}
                       >
                         <div
+                          className="macro-display"
                           style={{
                             fontSize: "16px",
                             fontWeight: "bold",
                             color: "#667eea",
                           }}
                         >
-                          {ingredient.fat}g
+                          {formatApproximateMacro(ingredient.fat)}g
                         </div>
                         <div style={{ fontSize: "12px", color: "#666" }}>
                           fat
@@ -1552,7 +2085,13 @@ function AppContent() {
                           step="0.1"
                           min="0.1"
                           max="10"
-                          defaultValue={ingredient.servingMultiplier.toFixed(1)}
+                          value={ingredient.servingMultiplier.toFixed(1)}
+                          onChange={(e) => {
+                            const value = parseFloat(e.target.value);
+                            if (!isNaN(value) && value >= 0.1 && value <= 10) {
+                              updateIngredientServing(ingredient.id, value);
+                            }
+                          }}
                           onBlur={(e) => {
                             const value = parseFloat(e.target.value);
                             if (isNaN(value) || value < 0.1) {
@@ -1613,6 +2152,35 @@ function AppContent() {
                       </div>
                     </div>
                   </div>
+                  
+                  {/* AdSense Ad Unit - Show after every 3 ingredients */}
+                  {(index + 1) % 3 === 0 && (
+                    <div style={{ marginTop: "16px", marginBottom: "16px" }}>
+                      <ins 
+                        className="adsbygoogle"
+                        style={{ display: "block" }}
+                        data-ad-format="fluid"
+                        data-ad-layout-key="-gw-3+1f-3d+2z"
+                        data-ad-client="ca-pub-3121230953653374"
+                        data-ad-slot="9642404265"
+                      />
+                      <div 
+                        style={{ 
+                          background: "#f8f9fa", 
+                          padding: "10px", 
+                          textAlign: "center", 
+                          border: "1px solid #dee2e6",
+                          borderRadius: "4px",
+                          fontSize: "12px",
+                          color: "#6c757d",
+                          marginTop: "8px"
+                        }}
+                      >
+                        Ad loading... (disable ad blocker if not showing)
+                      </div>
+                    </div>
+                  )}
+                </React.Fragment>
                 ))}
               </div>
             )}
@@ -1748,6 +2316,9 @@ function AppContent() {
   );
 
   const renderHistoryTab = () => {
+    const stats = getDailyStats();
+    const macroData = getMacroData();
+
     const toggleMealExpansion = (mealId) => {
       const newExpanded = new Set(expandedMeals);
       if (newExpanded.has(mealId)) {
@@ -1761,6 +2332,74 @@ function AppContent() {
     return (
       <div className="card">
         <h2 style={{ marginBottom: "20px" }}>📋 Meal History</h2>
+
+        {/* Today's Progress - Added to top */}
+        <div style={{ marginBottom: "24px" }}>
+          <h3 style={{ marginBottom: "16px", color: "#333" }}>
+            Today's Progress
+          </h3>
+          <div className="stats-grid">
+            <div className="stat-card">
+              <div className="stat-value macro-display">
+                {formatApproximateMacro(stats.totalCalories)}
+              </div>
+              <div className="stat-label">Total Calories</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-value macro-display">
+                {formatApproximateMacro(stats.totalProtein)}g
+              </div>
+              <div className="stat-label">Protein</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-value macro-display">
+                {formatApproximateMacro(stats.totalCarbs)}g
+              </div>
+              <div className="stat-label">Carbs</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-value macro-display">
+                {formatApproximateMacro(stats.totalFat)}g
+              </div>
+              <div className="stat-label">Fat</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Macronutrient Distribution Chart */}
+        {macroData.length > 0 && (
+          <div style={{ marginBottom: "24px" }}>
+            <h3 style={{ marginBottom: "16px", color: "#333" }}>
+              Macronutrient Distribution
+            </h3>
+            <div style={{ height: "200px" }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={macroData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percent }) =>
+                      `${name} ${(percent * 100).toFixed(0)}%`
+                    }
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {macroData.map((entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={["#667eea", "#764ba2", "#f093fb"][index % 3]}
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
 
         {meals.length === 0 ? (
           <div
@@ -1808,7 +2447,9 @@ function AppContent() {
                     )}
                     <div className="meal-info">
                       <div className="meal-title">
-                        {meal.analysis.meal_type || "Meal"}
+                        {meal.analysis.meal_title ||
+                          meal.analysis.meal_type ||
+                          generateMealTitle(meal.analysis.foods, meal.note)}
                         {!meal.imagePath && (
                           <span
                             style={{
@@ -1950,10 +2591,21 @@ function AppContent() {
                                 color: "#666",
                               }}
                             >
-                              <span>{ingredient.calories} cal</span>
-                              <span>{ingredient.protein}g protein</span>
-                              <span>{ingredient.carbs}g carbs</span>
-                              <span>{ingredient.fat}g fat</span>
+                              <span className="macro-display">
+                                {formatApproximateMacro(ingredient.calories)}{" "}
+                                cal
+                              </span>
+                              <span className="macro-display">
+                                {formatApproximateMacro(ingredient.protein)}g
+                                protein
+                              </span>
+                              <span className="macro-display">
+                                {formatApproximateMacro(ingredient.carbs)}g
+                                carbs
+                              </span>
+                              <span className="macro-display">
+                                {formatApproximateMacro(ingredient.fat)}g fat
+                              </span>
                             </div>
                           </div>
                         ))}
@@ -1979,26 +2631,26 @@ function AppContent() {
 
                 <div className="nutrition-grid">
                   <div className="nutrition-item">
-                    <div className="nutrition-value">
-                      {meal.analysis.total_calories}
+                    <div className="nutrition-value macro-display">
+                      {formatApproximateMacro(meal.analysis.total_calories)}
                     </div>
                     <div className="nutrition-label">Calories</div>
                   </div>
                   <div className="nutrition-item">
-                    <div className="nutrition-value">
-                      {meal.analysis.total_protein}g
+                    <div className="nutrition-value macro-display">
+                      {formatApproximateMacro(meal.analysis.total_protein)}g
                     </div>
                     <div className="nutrition-label">Protein</div>
                   </div>
                   <div className="nutrition-item">
-                    <div className="nutrition-value">
-                      {meal.analysis.total_carbs}g
+                    <div className="nutrition-value macro-display">
+                      {formatApproximateMacro(meal.analysis.total_carbs)}g
                     </div>
                     <div className="nutrition-label">Carbs</div>
                   </div>
                   <div className="nutrition-item">
-                    <div className="nutrition-value">
-                      {meal.analysis.total_fat}g
+                    <div className="nutrition-value macro-display">
+                      {formatApproximateMacro(meal.analysis.total_fat)}g
                     </div>
                     <div className="nutrition-label">Fat</div>
                   </div>
@@ -2011,33 +2663,700 @@ function AppContent() {
     );
   };
 
-  const renderAnalyticsTab = () => {
+  const renderGoalsTab = () => {
     const stats = getDailyStats();
     const macroData = getMacroData();
+    const timeSeriesData = getTimeSeriesData();
+
+    const handleGoalSelect = (goalId, goal) => {
+      setSelectedGoalId(goalId);
+      setSelectedGoal(goal);
+    };
 
     return (
       <div className="card">
-        <h2 style={{ marginBottom: "20px" }}>📊 Daily Analytics</h2>
+        <h2 style={{ marginBottom: "20px" }}>🎯 Yum Goals</h2>
 
-        <div className="stats-grid">
-          <div className="stat-card">
-            <div className="stat-value">{stats.totalCalories}</div>
-            <div className="stat-label">Total Calories</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-value">{stats.mealCount}</div>
-            <div className="stat-label">Meals Today</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-value">{stats.totalProtein}g</div>
-            <div className="stat-label">Total Protein</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-value">{stats.totalCarbs}g</div>
-            <div className="stat-label">Total Carbs</div>
+        {/* Today's Progress - Moved to top */}
+        <div style={{ marginBottom: "24px" }}>
+          <h3 style={{ marginBottom: "16px", color: "#333" }}>
+            Today's Progress
+            {selectedGoal?.targets?.calories && (
+              <span
+                style={{
+                  fontSize: "14px",
+                  color: "#666",
+                  fontWeight: "normal",
+                }}
+              >
+                {" "}
+                • Target: {selectedGoal.targets.calories} cal
+              </span>
+            )}
+          </h3>
+          <div className="stats-grid">
+            <div className="stat-card">
+              <div
+                className="stat-value macro-display"
+                style={{
+                  color:
+                    selectedGoal?.targets?.calories &&
+                    stats.totalCalories > selectedGoal.targets.calories
+                      ? "#ff6b6b"
+                      : selectedGoal?.targets?.calories &&
+                        stats.totalCalories <
+                          selectedGoal.targets.calories * 0.8
+                      ? "#ffa500"
+                      : "#333",
+                }}
+              >
+                {formatApproximateMacro(stats.totalCalories)}
+              </div>
+              <div className="stat-label">Total Calories</div>
+            </div>
+            <div className="stat-card">
+              <div
+                className="stat-value macro-display"
+                style={{
+                  color:
+                    selectedGoal?.targets?.protein &&
+                    stats.totalProtein < selectedGoal.targets.protein * 0.8
+                      ? "#ffa500"
+                      : "#333",
+                }}
+              >
+                {formatApproximateMacro(stats.totalProtein)}g
+              </div>
+              <div className="stat-label">Protein</div>
+            </div>
+            <div className="stat-card">
+              <div
+                className="stat-value macro-display"
+                style={{
+                  color:
+                    selectedGoal?.targets?.carbs &&
+                    stats.totalCarbs > selectedGoal.targets.carbs * 1.2
+                      ? "#ff6b6b"
+                      : "#333",
+                }}
+              >
+                {formatApproximateMacro(stats.totalCarbs)}g
+              </div>
+              <div className="stat-label">Carbs</div>
+            </div>
+            <div className="stat-card">
+              <div
+                className="stat-value macro-display"
+                style={{
+                  color:
+                    selectedGoal?.targets?.fat &&
+                    stats.totalFat > selectedGoal.targets.fat * 1.2
+                      ? "#ff6b6b"
+                      : "#333",
+                }}
+              >
+                {formatApproximateMacro(stats.totalFat)}g
+              </div>
+              <div className="stat-label">Fat</div>
+            </div>
           </div>
         </div>
 
+        {/* Time Series Chart with Goal Targets - Moved to top */}
+        {timeSeriesData.length > 0 && (
+          <div style={{ marginBottom: "24px" }}>
+            <h3 style={{ marginBottom: "16px", color: "#333" }}>
+              Nutrition Trends (Last 7 Days)
+              {selectedGoal?.targets && (
+                <span
+                  style={{
+                    fontSize: "14px",
+                    color: "#666",
+                    fontWeight: "normal",
+                  }}
+                >
+                  {" "}
+                  {selectedGoal.targets.calories &&
+                    `• Target: ${selectedGoal.targets.calories} cal`}
+                </span>
+              )}
+            </h3>
+
+            {/* Macro Toggle Buttons */}
+            <div
+              style={{
+                marginBottom: "16px",
+                display: "flex",
+                gap: "8px",
+                flexWrap: "wrap",
+                alignItems: "center",
+              }}
+            >
+              {[
+                { key: "calories", label: "Calories", color: "#667eea" },
+                { key: "protein", label: "Protein", color: "#764ba2" },
+                { key: "carbs", label: "Carbs", color: "#f093fb" },
+                { key: "fat", label: "Fat", color: "#ff6b6b" },
+              ].map(({ key, label, color }) => (
+                <button
+                  key={key}
+                  onClick={() => toggleMacro(key)}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: "20px",
+                    border: "1px solid #ddd",
+                    background: visibleMacros[key] ? color : "#f8f9fa",
+                    color: visibleMacros[key] ? "white" : "#666",
+                    cursor: "pointer",
+                    fontSize: "12px",
+                    fontWeight: "500",
+                    transition: "all 0.2s ease",
+                    opacity: visibleMacros[key] ? 1 : 0.6,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!visibleMacros[key]) {
+                      e.currentTarget.style.background = "#e9ecef";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!visibleMacros[key]) {
+                      e.currentTarget.style.background = "#f8f9fa";
+                    }
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+
+              <div style={{ marginLeft: "8px", display: "flex", gap: "4px" }}>
+                <button
+                  onClick={() => toggleAllMacros(true)}
+                  style={{
+                    padding: "4px 8px",
+                    borderRadius: "12px",
+                    border: "1px solid #ddd",
+                    background: "#f8f9fa",
+                    color: "#666",
+                    cursor: "pointer",
+                    fontSize: "10px",
+                    fontWeight: "500",
+                    transition: "all 0.2s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "#e9ecef";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "#f8f9fa";
+                  }}
+                >
+                  Show All
+                </button>
+                <button
+                  onClick={() => toggleAllMacros(false)}
+                  style={{
+                    padding: "4px 8px",
+                    borderRadius: "12px",
+                    border: "1px solid #ddd",
+                    background: "#f8f9fa",
+                    color: "#666",
+                    cursor: "pointer",
+                    fontSize: "10px",
+                    fontWeight: "500",
+                    transition: "all 0.2s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "#e9ecef";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "#f8f9fa";
+                  }}
+                >
+                  Hide All
+                </button>
+              </div>
+            </div>
+            <div style={{ height: "300px" }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={timeSeriesData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 12 }}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 12 }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <Tooltip
+                    formatter={(value, name) => [
+                      name === "calories"
+                        ? `${Math.round(value)} cal`
+                        : `${Math.round(value)}g`,
+                      name.charAt(0).toUpperCase() + name.slice(1),
+                    ]}
+                    labelStyle={{ color: "#333" }}
+                  />
+                  <Legend />
+                  {visibleMacros.calories && (
+                    <Line
+                      type="monotone"
+                      dataKey="calories"
+                      stroke="#667eea"
+                      strokeWidth={3}
+                      dot={{ fill: "#667eea", strokeWidth: 2, r: 4 }}
+                      activeDot={{ r: 6 }}
+                    />
+                  )}
+                  {visibleMacros.calories &&
+                    selectedGoal?.targets?.calories && (
+                      <Line
+                        type="monotone"
+                        dataKey="calorieTarget"
+                        stroke="#667eea"
+                        strokeWidth={2}
+                        strokeDasharray="5 5"
+                        dot={false}
+                        name="Calorie Target"
+                      />
+                    )}
+                  {visibleMacros.protein && (
+                    <Line
+                      type="monotone"
+                      dataKey="protein"
+                      stroke="#764ba2"
+                      strokeWidth={2}
+                      dot={{ fill: "#764ba2", strokeWidth: 2, r: 3 }}
+                      activeDot={{ r: 5 }}
+                    />
+                  )}
+                  {visibleMacros.protein && selectedGoal?.targets?.protein && (
+                    <Line
+                      type="monotone"
+                      dataKey="proteinTarget"
+                      stroke="#764ba2"
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      dot={false}
+                      name="Protein Target"
+                    />
+                  )}
+                  {visibleMacros.carbs && (
+                    <Line
+                      type="monotone"
+                      dataKey="carbs"
+                      stroke="#f093fb"
+                      strokeWidth={2}
+                      dot={{ fill: "#f093fb", strokeWidth: 2, r: 3 }}
+                      activeDot={{ r: 5 }}
+                    />
+                  )}
+                  {visibleMacros.carbs && selectedGoal?.targets?.carbs && (
+                    <Line
+                      type="monotone"
+                      dataKey="carbsTarget"
+                      stroke="#f093fb"
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      dot={false}
+                      name="Carbs Target"
+                    />
+                  )}
+                  {visibleMacros.fat && (
+                    <Line
+                      type="monotone"
+                      dataKey="fat"
+                      stroke="#ff6b6b"
+                      strokeWidth={2}
+                      dot={{ fill: "#ff6b6b", strokeWidth: 2, r: 3 }}
+                      activeDot={{ r: 5 }}
+                    />
+                  )}
+                  {visibleMacros.fat && selectedGoal?.targets?.fat && (
+                    <Line
+                      type="monotone"
+                      dataKey="fatTarget"
+                      stroke="#ff6b6b"
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      dot={false}
+                      name="Fat Target"
+                    />
+                  )}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+
+        {/* Goal Management */}
+        <GoalManager
+          onGoalSelect={handleGoalSelect}
+          selectedGoalId={selectedGoalId}
+        />
+
+        {/* Goal Analysis */}
+        {!selectedGoalId ? (
+          <div
+            style={{
+              marginBottom: "24px",
+              padding: "20px",
+              background: "#f8f9fa",
+              borderRadius: "12px",
+              textAlign: "center",
+              color: "#6c757d",
+            }}
+          >
+            <Target size={48} style={{ marginBottom: "16px", opacity: 0.5 }} />
+            <p>Select a goal above to see your progress analysis</p>
+          </div>
+        ) : goalAnalysis ? (
+          <div
+            style={{
+              marginBottom: "24px",
+              padding: "20px",
+              background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+              borderRadius: "12px",
+              color: "white",
+            }}
+          >
+            <h3
+              style={{
+                marginBottom: "16px",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+              }}
+            >
+              <GoldiePortrait size={32} />
+              {selectedGoal?.name || "Goal"} Assessment
+            </h3>
+            <div style={{ marginBottom: "16px" }}>
+              <p
+                style={{
+                  margin: "0 0 12px 0",
+                  fontSize: "16px",
+                  lineHeight: "1.6",
+                }}
+              >
+                <strong>Current Trend:</strong> {goalAnalysis.trend}
+              </p>
+              <p style={{ margin: "0", fontSize: "16px", lineHeight: "1.6" }}>
+                <strong>Recommendation:</strong> {goalAnalysis.recommendation}
+              </p>
+            </div>
+            <button
+              onClick={() => analyzeGoalProgress(true)}
+              disabled={isLoadingGoalProgress}
+              style={{
+                background: "rgba(255, 255, 255, 0.2)",
+                color: "white",
+                border: "1px solid rgba(255, 255, 255, 0.3)",
+                borderRadius: "6px",
+                padding: "8px 16px",
+                cursor: "pointer",
+                fontSize: "14px",
+              }}
+            >
+              {isLoadingGoalProgress ? "Analyzing..." : "Refresh Analysis"}
+            </button>
+          </div>
+        ) : null}
+
+        {/* Today's Recommendation */}
+        {!selectedGoalId ? null : todayRecommendation ? (
+          <div
+            style={{
+              marginBottom: "24px",
+              padding: "20px",
+              background: "linear-gradient(135deg, #28a745 0%, #20c997 100%)",
+              borderRadius: "12px",
+              color: "white",
+            }}
+          >
+            <h3
+              style={{
+                marginBottom: "16px",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+              }}
+            >
+              <GoldiePortrait size={32} />
+              Today's Recommendation
+            </h3>
+            <div style={{ marginBottom: "16px" }}>
+              <p style={{ margin: "0", fontSize: "16px", lineHeight: "1.6" }}>
+                {todayRecommendation}
+              </p>
+            </div>
+            <button
+              onClick={() => analyzeTodayRecommendation(true)}
+              disabled={isLoadingTodayRecommendation}
+              style={{
+                background: "rgba(255, 255, 255, 0.2)",
+                color: "white",
+                border: "1px solid rgba(255, 255, 255, 0.3)",
+                borderRadius: "6px",
+                padding: "8px 16px",
+                cursor: "pointer",
+                fontSize: "14px",
+              }}
+            >
+              {isLoadingTodayRecommendation
+                ? "Analyzing..."
+                : "Refresh Today's Advice"}
+            </button>
+          </div>
+        ) : null}
+
+        {/* Loading State for Today's Recommendation */}
+        {selectedGoalId &&
+          isLoadingTodayRecommendation &&
+          !todayRecommendation && (
+            <div
+              style={{
+                marginBottom: "24px",
+                padding: "20px",
+                background: "#f8f9fa",
+                borderRadius: "12px",
+                textAlign: "center",
+              }}
+            >
+              <div
+                className="spinner"
+                style={{ margin: "0 auto 12px auto" }}
+              ></div>
+              <p style={{ margin: 0, color: "#666" }}>
+                Getting today's recommendation...
+              </p>
+            </div>
+          )}
+
+        {/* Analysis Stats */}
+        {selectedGoalId && goalStats && (
+          <div
+            style={{
+              marginBottom: "24px",
+              padding: "20px",
+              background: "white",
+              borderRadius: "12px",
+              border: "2px solid #667eea",
+            }}
+          >
+            <h3 style={{ marginBottom: "16px", color: "#333" }}>
+              📊 Analysis Data
+            </h3>
+            <div style={{ marginBottom: "16px" }}>
+              <p
+                style={{ margin: "0 0 8px 0", fontSize: "14px", color: "#666" }}
+              >
+                <strong>Meals Analyzed:</strong> {goalStats.recentMeals} (last 7
+                days)
+              </p>
+              <p
+                style={{ margin: "0 0 8px 0", fontSize: "14px", color: "#666" }}
+              >
+                <strong>Average Calories:</strong>{" "}
+                {goalStats.avgCalories.toFixed(0)} per day
+              </p>
+              <p
+                style={{ margin: "0 0 8px 0", fontSize: "14px", color: "#666" }}
+              >
+                <strong>Macro Breakdown:</strong>{" "}
+                {goalStats.proteinPercent.toFixed(1)}% protein,{" "}
+                {goalStats.carbsPercent.toFixed(1)}% carbs,{" "}
+                {goalStats.fatPercent.toFixed(1)}% fat
+              </p>
+              <p style={{ margin: "0", fontSize: "14px", color: "#666" }}>
+                <strong>Average Macros:</strong>{" "}
+                {goalStats.avgProtein.toFixed(1)}g protein,{" "}
+                {goalStats.avgCarbs.toFixed(1)}g carbs,{" "}
+                {goalStats.avgFat.toFixed(1)}g fat
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Relevant Meals */}
+        {selectedGoalId && relevantMeals.length > 0 && (
+          <div
+            style={{
+              marginBottom: "24px",
+              padding: "20px",
+              background: "white",
+              borderRadius: "12px",
+              border: "1px solid #e9ecef",
+            }}
+          >
+            <h3 style={{ marginBottom: "16px", color: "#333" }}>
+              🍽️ Recent Meals (Last 7 Days)
+            </h3>
+            <div style={{ maxHeight: "300px", overflowY: "auto" }}>
+              {relevantMeals.map((meal, index) => {
+                const goalEvaluation = evaluateMealForGoal(meal);
+                const getScoreColor = (score) => {
+                  if (score >= 80) return "#28a745"; // Green
+                  if (score >= 60) return "#ffc107"; // Yellow
+                  if (score >= 40) return "#fd7e14"; // Orange
+                  return "#dc3545"; // Red
+                };
+
+                return (
+                  <div
+                    key={index}
+                    style={{
+                      padding: "12px",
+                      marginBottom: "8px",
+                      background: goalEvaluation.compliant
+                        ? "rgba(40, 167, 69, 0.1)"
+                        : "#f8f9fa",
+                      borderRadius: "8px",
+                      border: goalEvaluation.compliant
+                        ? "2px solid #28a745"
+                        : "1px solid #e9ecef",
+                      position: "relative",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: "8px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "4px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontWeight: "600",
+                            color: "#333",
+                            fontSize: "14px",
+                          }}
+                        >
+                          {meal.meal_title ||
+                            generateMealTitle(meal.foods, meal.note)}
+                        </span>
+                        <span
+                          style={{
+                            fontWeight: "500",
+                            color: "#666",
+                            fontSize: "12px",
+                          }}
+                        >
+                          {new Date(meal.date).toLocaleDateString()}
+                        </span>
+                        <span
+                          style={{
+                            padding: "4px 8px",
+                            borderRadius: "4px",
+                            fontSize: "11px",
+                            fontWeight: "bold",
+                            color: "white",
+                            background: getGoalComplianceColor(
+                              goalEvaluation.score
+                            ),
+                            display: "inline-block",
+                            width: "fit-content",
+                          }}
+                        >
+                          {getGoalComplianceLabel(goalEvaluation.score)}
+                        </span>
+                      </div>
+                      <span style={{ fontSize: "12px", color: "#666" }}>
+                        {meal.calories.toFixed(0)} cal
+                      </span>
+                    </div>
+
+                    {/* Macro indicators with color coding */}
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "12px",
+                        fontSize: "12px",
+                        marginBottom: "8px",
+                      }}
+                    >
+                      <span
+                        style={{
+                          color: goalEvaluation.details.carbs?.good
+                            ? "#28a745"
+                            : "#dc3545",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        Carbs: {goalEvaluation.details.carbs?.value.toFixed(1)}g
+                      </span>
+                      <span
+                        style={{
+                          color: goalEvaluation.details.fat?.good
+                            ? "#28a745"
+                            : "#dc3545",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        Fat: {goalEvaluation.details.fat?.value.toFixed(1)}g
+                      </span>
+                      <span
+                        style={{
+                          color: goalEvaluation.details.protein?.good
+                            ? "#28a745"
+                            : "#dc3545",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        Protein:{" "}
+                        {goalEvaluation.details.protein?.value.toFixed(1)}g
+                      </span>
+                    </div>
+
+                    {meal.note && (
+                      <div
+                        style={{
+                          fontSize: "12px",
+                          color: "#666",
+                          fontStyle: "italic",
+                        }}
+                      >
+                        "{meal.note}"
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {selectedGoalId && isLoadingGoalProgress && !goalAnalysis && (
+          <div
+            style={{
+              marginBottom: "24px",
+              padding: "20px",
+              background: "#f8f9fa",
+              borderRadius: "12px",
+              textAlign: "center",
+            }}
+          >
+            <div
+              className="spinner"
+              style={{ margin: "0 auto 12px auto" }}
+            ></div>
+            <p style={{ margin: 0, color: "#666" }}>
+              Analyzing your progress...
+            </p>
+          </div>
+        )}
+
+        {/* Macro Distribution Chart */}
         {macroData.length > 0 && (
           <div style={{ marginTop: "30px" }}>
             <h3 style={{ marginBottom: "20px", textAlign: "center" }}>
@@ -2115,7 +3434,7 @@ function AppContent() {
               }}
             >
               <Settings size={16} />
-              <span>{user?.primaryPhoneNumber?.phoneNumber || "User"}</span>
+              <span>{user?.emailAddresses?.[0]?.emailAddress || "User"}</span>
             </div>
             <button
               className="btn btn-secondary"
@@ -2233,24 +3552,23 @@ function AppContent() {
 
             <div style={{ marginBottom: "30px" }}>
               <h3 style={{ marginBottom: "16px", color: "#333" }}>
-                🔐 Passkey Management
+                🔐 Account Management
               </h3>
               <p style={{ marginBottom: "20px", color: "#666" }}>
-                Passkeys provide secure, passwordless authentication using your
-                device's biometrics or PIN.
+                Authentication is now handled via email and password for
+                improved security and ease of use.
               </p>
 
               <div style={{ marginBottom: "20px" }}>
-                <CreatePasskeyButton />
+                <p>
+                  You can manage your account settings and password in your
+                  Clerk dashboard.
+                </p>
+                <p>
+                  To change your email or update your password, please sign out
+                  and use the authentication options.
+                </p>
               </div>
-
-              <div style={{ marginBottom: "20px" }}>
-                <SignInWithPasskeyButton />
-              </div>
-            </div>
-
-            <div style={{ borderTop: "1px solid #eee", paddingTop: "20px" }}>
-              <PasskeyList />
             </div>
           </div>
         </div>
@@ -2259,308 +3577,7 @@ function AppContent() {
   );
 }
 
-// Passkey Management Components
-function CreatePasskeyButton() {
-  const { user } = useUser();
-
-  const createClerkPasskey = async () => {
-    if (!user) return;
-
-    try {
-      await user?.createPasskey();
-    } catch (err) {
-      console.error("Error:", JSON.stringify(err, null, 2));
-    }
-  };
-
-  return (
-    <button
-      className="btn btn-primary"
-      onClick={createClerkPasskey}
-      style={{ marginBottom: "16px" }}
-    >
-      <Key size={16} style={{ marginRight: "8px" }} />
-      Create a passkey
-    </button>
-  );
-}
-
-function SignInWithPasskeyButton() {
-  const { signIn } = useSignIn();
-  const { isSignedIn } = useUser();
-  const { setActive } = useClerk();
-
-  const signInWithPasskey = async () => {
-    // Don't try to sign in if already signed in
-    if (isSignedIn) {
-      console.log("User is already signed in");
-      return;
-    }
-
-    try {
-      const signInAttempt = await signIn?.authenticateWithPasskey({
-        flow: "discoverable",
-      });
-
-      if (signInAttempt?.status === "complete") {
-        console.log("Passkey authentication successful");
-        // Properly activate the session
-        await setActive({ session: signInAttempt.createdSessionId });
-      } else {
-        console.log("Sign-in attempt status:", signInAttempt?.status);
-      }
-    } catch (err) {
-      // Handle specific error cases
-      if (err.errors && err.errors.some((e) => e.code === "session_exists")) {
-        console.log(
-          "User is already signed in - this is expected after successful authentication"
-        );
-        // Try to refresh the session
-        try {
-          await setActive();
-        } catch (refreshError) {
-          console.error("Error refreshing session:", refreshError);
-        }
-      } else {
-        console.error(
-          "Passkey authentication error:",
-          JSON.stringify(err, null, 2)
-        );
-      }
-    }
-  };
-
-  // Don't show the button if user is already signed in
-  if (isSignedIn) {
-    return null;
-  }
-
-  return (
-    <button
-      className="btn btn-primary"
-      onClick={signInWithPasskey}
-      style={{ marginBottom: "16px" }}
-    >
-      <Key size={16} style={{ marginRight: "8px" }} />
-      Sign in with a passkey
-    </button>
-  );
-}
-
-function PasskeyList() {
-  const { user } = useUser();
-  const { passkeys } = user || {};
-  const [editingId, setEditingId] = useState(null);
-  const [newName, setNewName] = useState("");
-  const [success, setSuccess] = useState("");
-
-  const startEditing = (passkey) => {
-    setEditingId(passkey.id);
-    setNewName(passkey.name || "");
-    setSuccess("");
-  };
-
-  const cancelEditing = () => {
-    setEditingId(null);
-    setNewName("");
-    setSuccess("");
-  };
-
-  const saveEdit = async () => {
-    try {
-      const passkeyToUpdate = passkeys?.find((pk) => pk.id === editingId);
-      await passkeyToUpdate?.update({ name: newName });
-      setSuccess("Passkey renamed successfully!");
-      setEditingId(null);
-      setNewName("");
-      setTimeout(() => setSuccess(""), 3000);
-    } catch (err) {
-      console.error("Error:", JSON.stringify(err, null, 2));
-      setSuccess("Error renaming passkey");
-      setTimeout(() => setSuccess(""), 3000);
-    }
-  };
-
-  const deletePasskey = async (passkeyId) => {
-    try {
-      const passkeyToDelete = passkeys?.find((pk) => pk.id === passkeyId);
-      await passkeyToDelete?.delete();
-      setSuccess("Passkey deleted successfully!");
-      setTimeout(() => setSuccess(""), 3000);
-    } catch (err) {
-      console.error("Error:", JSON.stringify(err, null, 2));
-      setSuccess("Error deleting passkey");
-      setTimeout(() => setSuccess(""), 3000);
-    }
-  };
-
-  if (!passkeys || passkeys.length === 0) {
-    return (
-      <div
-        style={{
-          textAlign: "center",
-          padding: "20px",
-          color: "#666",
-          background: "#f8f9fa",
-          borderRadius: "8px",
-        }}
-      >
-        <Key size={32} style={{ marginBottom: "8px", opacity: 0.5 }} />
-        <p>No passkeys set up yet. Create one to get started!</p>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ marginTop: "20px" }}>
-      <h4 style={{ marginBottom: "16px", color: "#333" }}>Your Passkeys</h4>
-
-      {success && (
-        <div
-          style={{
-            padding: "8px 12px",
-            marginBottom: "16px",
-            borderRadius: "6px",
-            background: success.includes("Error") ? "#f8d7da" : "#d4edda",
-            color: success.includes("Error") ? "#721c24" : "#155724",
-            fontSize: "14px",
-          }}
-        >
-          {success}
-        </div>
-      )}
-
-      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-        {passkeys?.map((pk) => (
-          <div
-            key={pk.id}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "16px",
-              background: "#f8f9fa",
-              borderRadius: "8px",
-              border: "1px solid #e9ecef",
-            }}
-          >
-            <div style={{ flex: 1 }}>
-              {editingId === pk.id ? (
-                <div
-                  style={{ display: "flex", alignItems: "center", gap: "8px" }}
-                >
-                  <input
-                    type="text"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    style={{
-                      padding: "6px 8px",
-                      borderRadius: "4px",
-                      border: "1px solid #ddd",
-                      fontSize: "14px",
-                      flex: 1,
-                    }}
-                    placeholder="Enter passkey name"
-                  />
-                  <button
-                    onClick={saveEdit}
-                    style={{
-                      padding: "6px 8px",
-                      background: "#28a745",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "4px",
-                      cursor: "pointer",
-                      fontSize: "12px",
-                    }}
-                  >
-                    Save
-                  </button>
-                  <button
-                    onClick={cancelEditing}
-                    style={{
-                      padding: "6px 8px",
-                      background: "#6c757d",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "4px",
-                      cursor: "pointer",
-                      fontSize: "12px",
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              ) : (
-                <div>
-                  <div
-                    style={{
-                      fontSize: "16px",
-                      fontWeight: "500",
-                      color: "#333",
-                      marginBottom: "4px",
-                    }}
-                  >
-                    {pk.name || "Unnamed Passkey"}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: "12px",
-                      color: "#6c757d",
-                    }}
-                  >
-                    ID: {pk.id}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {editingId !== pk.id && (
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button
-                  onClick={() => startEditing(pk)}
-                  style={{
-                    padding: "6px 8px",
-                    background: "#007bff",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "4px",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "4px",
-                    fontSize: "12px",
-                  }}
-                >
-                  <Edit size={12} />
-                  Edit
-                </button>
-                <button
-                  onClick={() => deletePasskey(pk.id)}
-                  style={{
-                    padding: "6px 8px",
-                    background: "#dc3545",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "4px",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "4px",
-                    fontSize: "12px",
-                  }}
-                >
-                  <Trash size={12} />
-                  Delete
-                </button>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+// Authentication Components (Email/Password)
 
 // Main App component with ClerkProvider
 function App() {

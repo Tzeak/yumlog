@@ -28,7 +28,7 @@ function initDatabase() {
       const createUsersTableQuery = `
         CREATE TABLE IF NOT EXISTS users (
           id TEXT PRIMARY KEY,
-          phone_number TEXT UNIQUE NOT NULL,
+          email TEXT UNIQUE NOT NULL,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
@@ -43,8 +43,37 @@ function initDatabase() {
 
         console.log("✅ Users table ready");
 
-        // Create meals table if it doesn't exist
-        const createMealsTableQuery = `
+        // Create goals table if it doesn't exist
+        const createGoalsTableQuery = `
+          CREATE TABLE IF NOT EXISTS goals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            guidelines TEXT,
+            evaluation_criteria TEXT,
+            target_calories INTEGER,
+            target_protein REAL,
+            target_carbs REAL,
+            target_fat REAL,
+            is_active BOOLEAN DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+          )
+        `;
+
+        db.run(createGoalsTableQuery, (err) => {
+          if (err) {
+            console.error("Error creating goals table:", err);
+            reject(err);
+            return;
+          }
+
+          console.log("✅ Goals table ready");
+
+          // Create meals table if it doesn't exist
+          const createMealsTableQuery = `
           CREATE TABLE IF NOT EXISTS meals (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id TEXT NOT NULL,
@@ -57,70 +86,71 @@ function initDatabase() {
           )
         `;
 
-        db.run(createMealsTableQuery, (err) => {
-          if (err) {
-            console.error("Error creating meals table:", err);
-            reject(err);
-            return;
-          }
-
-          console.log("✅ Meals table ready");
-
-          // Check if user_id column exists in meals table (migration)
-          db.all("PRAGMA table_info(meals)", (err, columns) => {
+          db.run(createMealsTableQuery, (err) => {
             if (err) {
-              console.error("Error getting table info:", err);
+              console.error("Error creating meals table:", err);
               reject(err);
               return;
             }
 
-            const hasUserIdColumn = columns.some(
-              (col) => col.name === "user_id"
-            );
-            const hasNoteColumn = columns.some((col) => col.name === "note");
+            console.log("✅ Meals table ready");
 
-            if (!hasUserIdColumn) {
-              console.log("🔄 Adding user_id column to meals table...");
-              db.run("ALTER TABLE meals ADD COLUMN user_id TEXT", (err) => {
-                if (err) {
-                  console.error("Error adding user_id column:", err);
-                  reject(err);
-                  return;
-                }
-                console.log("✅ User ID column added successfully");
+            // Check if user_id column exists in meals table (migration)
+            db.all("PRAGMA table_info(meals)", (err, columns) => {
+              if (err) {
+                console.error("Error getting table info:", err);
+                reject(err);
+                return;
+              }
 
-                // Add note column if it doesn't exist
-                if (!hasNoteColumn) {
-                  console.log("🔄 Adding note column to meals table...");
-                  db.run("ALTER TABLE meals ADD COLUMN note TEXT", (err) => {
-                    if (err) {
-                      console.error("Error adding note column:", err);
-                      reject(err);
-                      return;
-                    }
-                    console.log("✅ Note column added successfully");
+              const hasUserIdColumn = columns.some(
+                (col) => col.name === "user_id"
+              );
+              const hasNoteColumn = columns.some((col) => col.name === "note");
+
+              if (!hasUserIdColumn) {
+                console.log("🔄 Adding user_id column to meals table...");
+                db.run("ALTER TABLE meals ADD COLUMN user_id TEXT", (err) => {
+                  if (err) {
+                    console.error("Error adding user_id column:", err);
+                    reject(err);
+                    return;
+                  }
+                  console.log("✅ User ID column added successfully");
+
+                  // Add note column if it doesn't exist
+                  if (!hasNoteColumn) {
+                    console.log("🔄 Adding note column to meals table...");
+                    db.run("ALTER TABLE meals ADD COLUMN note TEXT", (err) => {
+                      if (err) {
+                        console.error("Error adding note column:", err);
+                        reject(err);
+                        return;
+                      }
+                      console.log("✅ Note column added successfully");
+                      resolve();
+                    });
+                  } else {
+                    console.log("✅ Note column already exists");
                     resolve();
-                  });
-                } else {
-                  console.log("✅ Note column already exists");
+                  }
+                });
+              } else if (!hasNoteColumn) {
+                console.log("🔄 Adding note column to meals table...");
+                db.run("ALTER TABLE meals ADD COLUMN note TEXT", (err) => {
+                  if (err) {
+                    console.error("Error adding note column:", err);
+                    reject(err);
+                    return;
+                  }
+                  console.log("✅ Note column added successfully");
                   resolve();
-                }
-              });
-            } else if (!hasNoteColumn) {
-              console.log("🔄 Adding note column to meals table...");
-              db.run("ALTER TABLE meals ADD COLUMN note TEXT", (err) => {
-                if (err) {
-                  console.error("Error adding note column:", err);
-                  reject(err);
-                  return;
-                }
-                console.log("✅ Note column added successfully");
+                });
+              } else {
+                console.log("✅ All columns already exist");
                 resolve();
-              });
-            } else {
-              console.log("✅ All columns already exist");
-              resolve();
-            }
+              }
+            });
           });
         });
       });
@@ -128,14 +158,14 @@ function initDatabase() {
   });
 }
 
-function createOrUpdateUser(userId, phoneNumber) {
+function createOrUpdateUser(userId, email) {
   return new Promise((resolve, reject) => {
     const query = `
-      INSERT OR REPLACE INTO users (id, phone_number, updated_at)
+      INSERT OR REPLACE INTO users (id, email, updated_at)
       VALUES (?, ?, CURRENT_TIMESTAMP)
     `;
 
-    db.run(query, [userId, phoneNumber], function (err) {
+    db.run(query, [userId, email], function (err) {
       if (err) {
         console.error("Error creating/updating user:", err);
         reject(err);
@@ -299,6 +329,180 @@ function getDailyStats(date, userId) {
   });
 }
 
+// Goal management functions
+function createGoal(goalData) {
+  return new Promise((resolve, reject) => {
+    const {
+      userId,
+      name,
+      description,
+      guidelines,
+      evaluationCriteria,
+      targets,
+    } = goalData;
+
+    const query = `
+      INSERT INTO goals (user_id, name, description, guidelines, evaluation_criteria, target_calories, target_protein, target_carbs, target_fat)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    const targetValues = [
+      userId,
+      name,
+      description || null,
+      guidelines || null,
+      evaluationCriteria || null,
+      targets?.calories || null,
+      targets?.protein || null,
+      targets?.carbs || null,
+      targets?.fat || null,
+    ];
+
+    db.run(query, targetValues, function (err) {
+      if (err) {
+        console.error("Error creating goal:", err);
+        reject(err);
+        return;
+      }
+
+      resolve(this.lastID);
+    });
+  });
+}
+
+function getGoals(userId) {
+  return new Promise((resolve, reject) => {
+    const query = `
+      SELECT id, name, description, guidelines, evaluation_criteria, target_calories, target_protein, target_carbs, target_fat, is_active, created_at, updated_at
+      FROM goals
+      WHERE user_id = ?
+      ORDER BY created_at DESC
+    `;
+
+    db.all(query, [userId], (err, rows) => {
+      if (err) {
+        console.error("Error fetching goals:", err);
+        reject(err);
+        return;
+      }
+
+      // Transform the data to include targets object
+      const transformedRows = rows.map((row) => ({
+        ...row,
+        targets: {
+          calories: row.target_calories,
+          protein: row.target_protein,
+          carbs: row.target_carbs,
+          fat: row.target_fat,
+        },
+      }));
+
+      resolve(transformedRows);
+    });
+  });
+}
+
+function getGoal(goalId, userId) {
+  return new Promise((resolve, reject) => {
+    const query = `
+      SELECT id, name, description, guidelines, evaluation_criteria, target_calories, target_protein, target_carbs, target_fat, is_active, created_at, updated_at
+      FROM goals
+      WHERE id = ? AND user_id = ?
+    `;
+
+    db.get(query, [goalId, userId], (err, row) => {
+      if (err) {
+        console.error("Error fetching goal:", err);
+        reject(err);
+        return;
+      }
+
+      if (row) {
+        // Transform the data to include targets object
+        row.targets = {
+          calories: row.target_calories,
+          protein: row.target_protein,
+          carbs: row.target_carbs,
+          fat: row.target_fat,
+        };
+      }
+
+      resolve(row);
+    });
+  });
+}
+
+function updateGoal(goalId, userId, goalData) {
+  return new Promise((resolve, reject) => {
+    const {
+      name,
+      description,
+      guidelines,
+      evaluationCriteria,
+      targets,
+      isActive,
+    } = goalData;
+
+    const query = `
+      UPDATE goals
+      SET name = ?, description = ?, guidelines = ?, evaluation_criteria = ?, target_calories = ?, target_protein = ?, target_carbs = ?, target_fat = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND user_id = ?
+    `;
+
+    db.run(
+      query,
+      [
+        name,
+        description || null,
+        guidelines || null,
+        evaluationCriteria || null,
+        targets?.calories || null,
+        targets?.protein || null,
+        targets?.carbs || null,
+        targets?.fat || null,
+        isActive ? 1 : 0,
+        goalId,
+        userId,
+      ],
+      function (err) {
+        if (err) {
+          console.error("Error updating goal:", err);
+          reject(err);
+          return;
+        }
+
+        if (this.changes === 0) {
+          reject(new Error("Goal not found or unauthorized"));
+          return;
+        }
+
+        resolve();
+      }
+    );
+  });
+}
+
+function deleteGoal(goalId, userId) {
+  return new Promise((resolve, reject) => {
+    const query = "DELETE FROM goals WHERE id = ? AND user_id = ?";
+
+    db.run(query, [goalId, userId], function (err) {
+      if (err) {
+        console.error("Error deleting goal:", err);
+        reject(err);
+        return;
+      }
+
+      if (this.changes === 0) {
+        reject(new Error("Goal not found or unauthorized"));
+        return;
+      }
+
+      resolve();
+    });
+  });
+}
+
 module.exports = {
   initDatabase,
   createOrUpdateUser,
@@ -307,4 +511,9 @@ module.exports = {
   getMeals,
   deleteMeal,
   getDailyStats,
+  createGoal,
+  getGoals,
+  getGoal,
+  updateGoal,
+  deleteGoal,
 };
