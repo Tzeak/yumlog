@@ -3,6 +3,8 @@ const cors = require("cors");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
+const jwt = require("jsonwebtoken");
+const { v4: uuidv4 } = require("uuid");
 require("dotenv").config();
 
 const {
@@ -24,6 +26,8 @@ const {
   getGoal,
   updateGoal,
   deleteGoal,
+  trackAnonymousUsage,
+  getAnonymousUsage,
 } = require("./services/database");
 
 const app = express();
@@ -81,7 +85,11 @@ const upload = multer({
 // Initialize database
 initDatabase();
 
-// Authentication middleware
+// JWT secret for anonymous tokens
+const JWT_SECRET =
+  process.env.JWT_SECRET || "yumlog-secret-key-change-in-production";
+
+// Authentication middleware for routes that REQUIRE authentication (history, goals)
 const authenticateUser = async (req, res, next) => {
   try {
     console.log("🔐 Authentication attempt for:", req.path);
@@ -113,12 +121,104 @@ const authenticateUser = async (req, res, next) => {
     await createOrUpdateUser(userId, email);
 
     // Add user info to request
-    req.user = { id: userId, email };
+    req.user = { id: userId, email, authenticated: true };
     console.log("✅ Authentication successful for user:", userId);
     next();
   } catch (error) {
     console.error("❌ Authentication error:", error);
     res.status(401).json({ error: "Authentication failed" });
+  }
+};
+
+// Flexible authentication middleware - allows both authenticated and anonymous users
+const authenticateOrAnonymous = async (req, res, next) => {
+  try {
+    console.log("🔓 Flexible authentication attempt for:", req.path);
+
+    const authHeader = req.headers.authorization;
+
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.substring(7);
+      console.log("🔑 Token received:", token.substring(0, 20) + "...");
+
+      // Try to parse as Clerk token first (user_id:email format)
+      if (token.includes(":")) {
+        const [userId, email] = token.split(":");
+        if (userId && email) {
+          await createOrUpdateUser(userId, email);
+          req.user = { id: userId, email, authenticated: true };
+          console.log("✅ Authenticated user:", userId);
+          return next();
+        }
+      }
+
+      // Try to parse as JWT token for anonymous users
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+
+        // Check usage limit for anonymous users
+        const usage = await getAnonymousUsage(decoded.anonymousId);
+        const USAGE_LIMIT = 3;
+
+        if (usage.usage_count >= USAGE_LIMIT) {
+          console.log(
+            "❌ Anonymous user exceeded usage limit:",
+            decoded.anonymousId
+          );
+          return res.status(429).json({
+            error: "Usage limit exceeded",
+            requiresSignUp: true,
+            usageCount: usage.usage_count,
+            usageLimit: USAGE_LIMIT,
+            message:
+              "You've reached the limit of 3 free analyses. Please sign up to continue.",
+          });
+        }
+
+        req.user = {
+          id: decoded.anonymousId,
+          email: null,
+          authenticated: false,
+          anonymous: true,
+          usageCount: usage.usage_count,
+          usageLimit: USAGE_LIMIT,
+        };
+        console.log(
+          "✅ Anonymous user with token:",
+          decoded.anonymousId,
+          "Usage:",
+          usage.usage_count
+        );
+        return next();
+      } catch (jwtError) {
+        console.log("❌ Invalid JWT token:", jwtError.message);
+      }
+    }
+
+    // No valid token provided - create anonymous session
+    const anonymousId = `anon_${uuidv4()}`;
+    const anonymousToken = jwt.sign(
+      { anonymousId, type: "anonymous" },
+      JWT_SECRET,
+      { expiresIn: "365d" } // Long-lived token
+    );
+
+    req.user = {
+      id: anonymousId,
+      email: null,
+      authenticated: false,
+      anonymous: true,
+      usageCount: 0,
+      usageLimit: 3,
+    };
+
+    // Send the new token back in response headers
+    res.set("X-Anonymous-Token", anonymousToken);
+    console.log("✅ New anonymous user created:", anonymousId);
+    next();
+  } catch (error) {
+    console.error("❌ Authentication error:", error);
+    res.status(500).json({ error: "Authentication system error" });
   }
 };
 
@@ -139,10 +239,30 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "OK", message: "Yumlog API is running" });
 });
 
+// Generate anonymous token
+app.post("/api/generate-anonymous-token", (req, res) => {
+  try {
+    const anonymousId = `anon_${uuidv4()}`;
+    const token = jwt.sign({ anonymousId, type: "anonymous" }, JWT_SECRET, {
+      expiresIn: "365d",
+    });
+
+    console.log("✅ Generated anonymous token for:", anonymousId);
+    res.json({
+      token,
+      anonymousId,
+      message: "Anonymous token generated successfully",
+    });
+  } catch (error) {
+    console.error("❌ Error generating anonymous token:", error);
+    res.status(500).json({ error: "Failed to generate anonymous token" });
+  }
+});
+
 // Upload and analyze food image (without saving)
 app.post(
   "/api/analyze-food-only",
-  authenticateUser,
+  authenticateOrAnonymous,
   upload.single("image"),
   async (req, res) => {
     try {
@@ -193,9 +313,26 @@ app.post(
       }
       console.log("✅ OpenAI analysis completed");
 
+      // Track usage for anonymous users
+      if (req.user.anonymous) {
+        try {
+          await trackAnonymousUsage(req.user.id);
+          console.log("📊 Tracked anonymous usage for:", req.user.id);
+        } catch (usageError) {
+          console.error("❌ Failed to track anonymous usage:", usageError);
+        }
+      }
+
       res.json({
         success: true,
         analysis: analysis,
+        usageInfo: req.user.anonymous
+          ? {
+              usageCount: req.user.usageCount + 1,
+              usageLimit: req.user.usageLimit,
+              usageRemaining: req.user.usageLimit - (req.user.usageCount + 1),
+            }
+          : undefined,
       });
     } catch (error) {
       console.error("❌ Error analyzing food:", error);
@@ -210,7 +347,7 @@ app.post(
 // Upload and analyze food image (with saving)
 app.post(
   "/api/analyze-food",
-  authenticateUser,
+  authenticateOrAnonymous,
   upload.single("image"),
   async (req, res) => {
     try {
@@ -290,16 +427,21 @@ app.post(
         note = analysis.notes.trim();
       }
 
-      // Save the meal to database
-      console.log("💾 Saving meal to database...");
-      const mealId = await saveMeal({
-        userId: req.user.id,
-        imagePath: req.file.filename,
-        analysis: analysis,
-        note: note,
-        timestamp: new Date().toISOString(),
-      });
-      console.log("✅ Meal saved with ID:", mealId);
+      let mealId = null;
+      // Only save meal for authenticated users
+      if (req.user.authenticated) {
+        console.log("💾 Saving meal to database...");
+        mealId = await saveMeal({
+          userId: req.user.id,
+          imagePath: req.file.filename,
+          analysis: analysis,
+          note: note,
+          timestamp: new Date().toISOString(),
+        });
+        console.log("✅ Meal saved with ID:", mealId);
+      } else {
+        console.log("👤 Anonymous user - meal analysis provided but not saved");
+      }
 
       res.json({
         success: true,
@@ -318,55 +460,76 @@ app.post(
 );
 
 // Analyze text description (without saving)
-app.post("/api/analyze-text-only", authenticateUser, async (req, res) => {
-  try {
-    console.log("🔍 Starting text analysis request (analysis only)...");
+app.post(
+  "/api/analyze-text-only",
+  authenticateOrAnonymous,
+  async (req, res) => {
+    try {
+      console.log("🔍 Starting text analysis request (analysis only)...");
 
-    const { description } = req.body;
+      const { description } = req.body;
 
-    if (!description || !description.trim()) {
-      console.log("❌ No description provided");
-      return res.status(400).json({ error: "No description provided" });
-    }
+      if (!description || !description.trim()) {
+        console.log("❌ No description provided");
+        return res.status(400).json({ error: "No description provided" });
+      }
 
-    console.log(
-      "📝 Description received:",
-      description.substring(0, 100) + "..."
-    );
+      console.log(
+        "📝 Description received:",
+        description.substring(0, 100) + "..."
+      );
 
-    let analysis;
+      let analysis;
 
-    // Check if OpenAI API key is configured
-    if (
-      !process.env.OPENAI_API_KEY ||
-      process.env.OPENAI_API_KEY === "your_openai_api_key_here"
-    ) {
-      console.log("❌ OpenAI API key not configured");
-      return res.status(500).json({
-        error:
-          "OpenAI API key not configured. Please add your API key to the .env file.",
+      // Check if OpenAI API key is configured
+      if (
+        !process.env.OPENAI_API_KEY ||
+        process.env.OPENAI_API_KEY === "your_openai_api_key_here"
+      ) {
+        console.log("❌ OpenAI API key not configured");
+        return res.status(500).json({
+          error:
+            "OpenAI API key not configured. Please add your API key to the .env file.",
+        });
+      }
+
+      console.log("🤖 Calling OpenAI API for text analysis...");
+      analysis = await analyzeTextDescription(description);
+      console.log("✅ OpenAI text analysis completed");
+
+      // Track usage for anonymous users
+      if (req.user.anonymous) {
+        try {
+          await trackAnonymousUsage(req.user.id);
+          console.log("📊 Tracked anonymous usage for:", req.user.id);
+        } catch (usageError) {
+          console.error("❌ Failed to track anonymous usage:", usageError);
+        }
+      }
+
+      res.json({
+        success: true,
+        analysis: analysis,
+        usageInfo: req.user.anonymous
+          ? {
+              usageCount: req.user.usageCount + 1,
+              usageLimit: req.user.usageLimit,
+              usageRemaining: req.user.usageLimit - (req.user.usageCount + 1),
+            }
+          : undefined,
+      });
+    } catch (error) {
+      console.error("❌ Error analyzing text:", error);
+      res.status(500).json({
+        error: "Failed to analyze text description",
+        details: error.message,
       });
     }
-
-    console.log("🤖 Calling OpenAI API for text analysis...");
-    analysis = await analyzeTextDescription(description);
-    console.log("✅ OpenAI text analysis completed");
-
-    res.json({
-      success: true,
-      analysis: analysis,
-    });
-  } catch (error) {
-    console.error("❌ Error analyzing text:", error);
-    res.status(500).json({
-      error: "Failed to analyze text description",
-      details: error.message,
-    });
   }
-});
+);
 
 // Analyze text description (with saving)
-app.post("/api/analyze-text", authenticateUser, async (req, res) => {
+app.post("/api/analyze-text", authenticateOrAnonymous, async (req, res) => {
   try {
     console.log("🔍 Starting text analysis request with saving...");
 
@@ -429,16 +592,21 @@ app.post("/api/analyze-text", authenticateUser, async (req, res) => {
       note = analysis.notes.trim();
     }
 
-    // Save the meal to database (without image path)
-    console.log("💾 Saving text-based meal to database...");
-    const mealId = await saveMeal({
-      userId: req.user.id,
-      imagePath: null, // No image for text-based meals
-      analysis: analysis,
-      note: note,
-      timestamp: new Date().toISOString(),
-    });
-    console.log("✅ Text-based meal saved with ID:", mealId);
+    let mealId = null;
+    // Only save meal for authenticated users
+    if (req.user.authenticated) {
+      console.log("💾 Saving text-based meal to database...");
+      mealId = await saveMeal({
+        userId: req.user.id,
+        imagePath: null, // No image for text-based meals
+        analysis: analysis,
+        note: note,
+        timestamp: new Date().toISOString(),
+      });
+      console.log("✅ Text-based meal saved with ID:", mealId);
+    } else {
+      console.log("👤 Anonymous user - text analysis provided but not saved");
+    }
 
     res.json({
       success: true,

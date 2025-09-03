@@ -69,8 +69,44 @@ async function logUserAction({ email, action, status }) {
 
 function AppContent() {
   const { user, isSignedIn, isLoaded } = useUser();
+
+  // If not loaded yet, show loading
+  if (!isLoaded) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          height: "100vh",
+          fontSize: "18px",
+          color: "#667eea",
+        }}
+      >
+        Loading...
+      </div>
+    );
+  }
+
+  // If not signed in, show authenticated standalone version (with working Clerk buttons)
+  if (!isSignedIn) {
+    return <AppContentStandaloneWithClerk />;
+  }
+
+  // If signed in, render the authenticated app
+  return (
+    <AppContentAuthenticated
+      user={user}
+      isSignedIn={isSignedIn}
+      isLoaded={isLoaded}
+    />
+  );
+}
+
+function AppContentAuthenticated({ user, isSignedIn, isLoaded }) {
   const { getToken } = useAuth();
   const { signOut } = useClerk();
+
   const [activeTab, setActiveTab] = useState("upload");
   const [showSettings, setShowSettings] = useState(false);
 
@@ -208,33 +244,41 @@ function AppContent() {
   useEffect(() => {
     if (editableIngredients.length > 0) {
       const timer = setTimeout(() => {
-        if (typeof window !== 'undefined' && window.adsbygoogle) {
+        if (typeof window !== "undefined" && window.adsbygoogle) {
           try {
             // Find all uninitialized ad elements
-            const adElements = document.querySelectorAll('ins.adsbygoogle:not([data-ad-status])');
-            console.log('Found', adElements.length, 'ad elements to initialize');
+            const adElements = document.querySelectorAll(
+              "ins.adsbygoogle:not([data-ad-status])"
+            );
+            console.log(
+              "Found",
+              adElements.length,
+              "ad elements to initialize"
+            );
             adElements.forEach((element) => {
               try {
                 window.adsbygoogle.push({});
-                console.log('Ad initialized successfully');
-                
+                console.log("Ad initialized successfully");
+
                 // Check ad status after a delay
                 setTimeout(() => {
-                  const status = element.getAttribute('data-ad-status');
-                  console.log('Ad status:', status);
-                  if (status === 'unfilled') {
-                    console.log('Ad slot unfilled - might be due to ad blockers or account status');
+                  const status = element.getAttribute("data-ad-status");
+                  console.log("Ad status:", status);
+                  if (status === "unfilled") {
+                    console.log(
+                      "Ad slot unfilled - might be due to ad blockers or account status"
+                    );
                   }
                 }, 2000);
               } catch (error) {
-                console.log('Ad initialization error:', error);
+                console.log("Ad initialization error:", error);
               }
             });
           } catch (error) {
-            console.log('AdSense initialization error:', error);
+            console.log("AdSense initialization error:", error);
           }
         } else {
-          console.log('AdSense script not loaded yet');
+          console.log("AdSense script not loaded yet");
         }
       }, 500); // Wait 500ms for DOM to be ready
 
@@ -1337,6 +1381,39 @@ function AppContent() {
         🍽️ Log Your Meal
       </h2>
 
+      {/* Anonymous user notice */}
+      {!isSignedIn && (
+        <div
+          style={{
+            background: "#e7f3ff",
+            borderRadius: "8px",
+            padding: "16px",
+            marginBottom: "20px",
+            border: "1px solid #b3d9ff",
+            textAlign: "center",
+          }}
+        >
+          <p style={{ margin: "0", color: "#0066cc", fontSize: "14px" }}>
+            🎉 <strong>Try it out!</strong> Analyze food without signing up.
+            <SignInButton
+              mode="modal"
+              style={{
+                color: "#0066cc",
+                textDecoration: "underline",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontSize: "14px",
+                marginLeft: "4px",
+              }}
+            >
+              Sign in
+            </SignInButton>
+            to save your meals and access history.
+          </p>
+        </div>
+      )}
+
       {/* Unified Input Section */}
       <div style={{ marginBottom: "24px" }}>
         <div
@@ -1853,334 +1930,342 @@ function AppContent() {
                             : "1px solid #e9ecef",
                       }}
                     >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "flex-start",
-                        marginBottom: "12px",
-                      }}
-                    >
-                      <div style={{ flex: 1 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "flex-start",
+                          marginBottom: "12px",
+                        }}
+                      >
+                        <div style={{ flex: 1 }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
+                              marginBottom: "4px",
+                            }}
+                          >
+                            <h5
+                              style={{
+                                margin: 0,
+                                color: "#333",
+                                fontSize: "16px",
+                              }}
+                            >
+                              {ingredient.name}
+                            </h5>
+                            {ingredient.confidence === "user_added" && (
+                              <span
+                                style={{
+                                  background: "#28a745",
+                                  color: "white",
+                                  padding: "2px 6px",
+                                  borderRadius: "4px",
+                                  fontSize: "10px",
+                                  fontWeight: "bold",
+                                }}
+                              >
+                                ADDED
+                              </span>
+                            )}
+                            {ingredient.confidence === "low" && (
+                              <span
+                                style={{
+                                  background: "#ffc107",
+                                  color: "#333",
+                                  padding: "2px 6px",
+                                  borderRadius: "4px",
+                                  fontSize: "10px",
+                                  fontWeight: "bold",
+                                }}
+                              >
+                                LOW CONFIDENCE
+                              </span>
+                            )}
+                          </div>
+                          <p
+                            style={{
+                              margin: 0,
+                              color: "#666",
+                              fontSize: "14px",
+                            }}
+                          >
+                            {formatServingDisplay(
+                              ingredient.originalQuantity,
+                              ingredient.servingMultiplier
+                            )}
+                          </p>
+                        </div>
+
+                        <button
+                          onClick={() => removeIngredient(ingredient.id)}
+                          style={{
+                            background: "#dc3545",
+                            color: "white",
+                            border: "none",
+                            borderRadius: "4px",
+                            padding: "4px 8px",
+                            cursor: "pointer",
+                            fontSize: "12px",
+                          }}
+                        >
+                          <Trash size={12} />
+                        </button>
+                      </div>
+
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns:
+                            "repeat(auto-fit, minmax(80px, 1fr))",
+                          gap: "8px",
+                          marginBottom: "12px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            textAlign: "center",
+                            padding: "8px",
+                            background: "#f8f9fa",
+                            borderRadius: "4px",
+                          }}
+                        >
+                          <div
+                            className="macro-display"
+                            style={{
+                              fontSize: "16px",
+                              fontWeight: "bold",
+                              color: "#667eea",
+                            }}
+                          >
+                            {formatApproximateMacro(ingredient.calories)}
+                          </div>
+                          <div style={{ fontSize: "12px", color: "#666" }}>
+                            cal
+                          </div>
+                        </div>
+                        <div
+                          style={{
+                            textAlign: "center",
+                            padding: "8px",
+                            background: "#f8f9fa",
+                            borderRadius: "4px",
+                          }}
+                        >
+                          <div
+                            className="macro-display"
+                            style={{
+                              fontSize: "16px",
+                              fontWeight: "bold",
+                              color: "#667eea",
+                            }}
+                          >
+                            {formatApproximateMacro(ingredient.protein)}g
+                          </div>
+                          <div style={{ fontSize: "12px", color: "#666" }}>
+                            protein
+                          </div>
+                        </div>
+                        <div
+                          style={{
+                            textAlign: "center",
+                            padding: "8px",
+                            background: "#f8f9fa",
+                            borderRadius: "4px",
+                          }}
+                        >
+                          <div
+                            className="macro-display"
+                            style={{
+                              fontSize: "16px",
+                              fontWeight: "bold",
+                              color: "#667eea",
+                            }}
+                          >
+                            {formatApproximateMacro(ingredient.carbs)}g
+                          </div>
+                          <div style={{ fontSize: "12px", color: "#666" }}>
+                            carbs
+                          </div>
+                        </div>
+                        <div
+                          style={{
+                            textAlign: "center",
+                            padding: "8px",
+                            background: "#f8f9fa",
+                            borderRadius: "4px",
+                          }}
+                        >
+                          <div
+                            className="macro-display"
+                            style={{
+                              fontSize: "16px",
+                              fontWeight: "bold",
+                              color: "#667eea",
+                            }}
+                          >
+                            {formatApproximateMacro(ingredient.fat)}g
+                          </div>
+                          <div style={{ fontSize: "12px", color: "#666" }}>
+                            fat
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Serving Size Adjustment */}
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "12px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: "14px",
+                            color: "#666",
+                            minWidth: "80px",
+                          }}
+                        >
+                          Serving:
+                        </span>
                         <div
                           style={{
                             display: "flex",
                             alignItems: "center",
                             gap: "8px",
-                            marginBottom: "4px",
                           }}
                         >
-                          <h5
+                          <button
+                            onClick={() =>
+                              updateIngredientServing(
+                                ingredient.id,
+                                ingredient.servingMultiplier - 0.1
+                              )
+                            }
                             style={{
-                              margin: 0,
-                              color: "#333",
-                              fontSize: "16px",
+                              background: "#6c757d",
+                              color: "white",
+                              border: "none",
+                              borderRadius: "4px",
+                              width: "32px",
+                              height: "32px",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
                             }}
                           >
-                            {ingredient.name}
-                          </h5>
-                          {ingredient.confidence === "user_added" && (
-                            <span
-                              style={{
-                                background: "#28a745",
-                                color: "white",
-                                padding: "2px 6px",
-                                borderRadius: "4px",
-                                fontSize: "10px",
-                                fontWeight: "bold",
-                              }}
-                            >
-                              ADDED
-                            </span>
-                          )}
-                          {ingredient.confidence === "low" && (
-                            <span
-                              style={{
-                                background: "#ffc107",
-                                color: "#333",
-                                padding: "2px 6px",
-                                borderRadius: "4px",
-                                fontSize: "10px",
-                                fontWeight: "bold",
-                              }}
-                            >
-                              LOW CONFIDENCE
-                            </span>
-                          )}
-                        </div>
-                        <p
-                          style={{ margin: 0, color: "#666", fontSize: "14px" }}
-                        >
-                          {formatServingDisplay(
-                            ingredient.originalQuantity,
-                            ingredient.servingMultiplier
-                          )}
-                        </p>
-                      </div>
-
-                      <button
-                        onClick={() => removeIngredient(ingredient.id)}
-                        style={{
-                          background: "#dc3545",
-                          color: "white",
-                          border: "none",
-                          borderRadius: "4px",
-                          padding: "4px 8px",
-                          cursor: "pointer",
-                          fontSize: "12px",
-                        }}
-                      >
-                        <Trash size={12} />
-                      </button>
-                    </div>
-
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns:
-                          "repeat(auto-fit, minmax(80px, 1fr))",
-                        gap: "8px",
-                        marginBottom: "12px",
-                      }}
-                    >
-                      <div
-                        style={{
-                          textAlign: "center",
-                          padding: "8px",
-                          background: "#f8f9fa",
-                          borderRadius: "4px",
-                        }}
-                      >
-                        <div
-                          className="macro-display"
-                          style={{
-                            fontSize: "16px",
-                            fontWeight: "bold",
-                            color: "#667eea",
-                          }}
-                        >
-                          {formatApproximateMacro(ingredient.calories)}
-                        </div>
-                        <div style={{ fontSize: "12px", color: "#666" }}>
-                          cal
-                        </div>
-                      </div>
-                      <div
-                        style={{
-                          textAlign: "center",
-                          padding: "8px",
-                          background: "#f8f9fa",
-                          borderRadius: "4px",
-                        }}
-                      >
-                        <div
-                          className="macro-display"
-                          style={{
-                            fontSize: "16px",
-                            fontWeight: "bold",
-                            color: "#667eea",
-                          }}
-                        >
-                          {formatApproximateMacro(ingredient.protein)}g
-                        </div>
-                        <div style={{ fontSize: "12px", color: "#666" }}>
-                          protein
-                        </div>
-                      </div>
-                      <div
-                        style={{
-                          textAlign: "center",
-                          padding: "8px",
-                          background: "#f8f9fa",
-                          borderRadius: "4px",
-                        }}
-                      >
-                        <div
-                          className="macro-display"
-                          style={{
-                            fontSize: "16px",
-                            fontWeight: "bold",
-                            color: "#667eea",
-                          }}
-                        >
-                          {formatApproximateMacro(ingredient.carbs)}g
-                        </div>
-                        <div style={{ fontSize: "12px", color: "#666" }}>
-                          carbs
-                        </div>
-                      </div>
-                      <div
-                        style={{
-                          textAlign: "center",
-                          padding: "8px",
-                          background: "#f8f9fa",
-                          borderRadius: "4px",
-                        }}
-                      >
-                        <div
-                          className="macro-display"
-                          style={{
-                            fontSize: "16px",
-                            fontWeight: "bold",
-                            color: "#667eea",
-                          }}
-                        >
-                          {formatApproximateMacro(ingredient.fat)}g
-                        </div>
-                        <div style={{ fontSize: "12px", color: "#666" }}>
-                          fat
+                            <Minus size={16} />
+                          </button>
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            step="0.1"
+                            min="0.1"
+                            max="10"
+                            value={ingredient.servingMultiplier.toFixed(1)}
+                            onChange={(e) => {
+                              const value = parseFloat(e.target.value);
+                              if (
+                                !isNaN(value) &&
+                                value >= 0.1 &&
+                                value <= 10
+                              ) {
+                                updateIngredientServing(ingredient.id, value);
+                              }
+                            }}
+                            onBlur={(e) => {
+                              const value = parseFloat(e.target.value);
+                              if (isNaN(value) || value < 0.1) {
+                                updateIngredientServing(ingredient.id, 0.1);
+                              } else if (value > 10) {
+                                updateIngredientServing(ingredient.id, 10);
+                              } else {
+                                updateIngredientServing(ingredient.id, value);
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.target.blur();
+                              }
+                            }}
+                            style={{
+                              width: "60px",
+                              textAlign: "center",
+                              fontWeight: "bold",
+                              fontSize: "16px",
+                              border: "2px solid #e9ecef",
+                              borderRadius: "4px",
+                              padding: "4px 8px",
+                              fontFamily: "inherit",
+                            }}
+                          />
+                          <span
+                            style={{
+                              fontWeight: "bold",
+                              fontSize: "16px",
+                              color: "#666",
+                            }}
+                          >
+                            x
+                          </span>
+                          <button
+                            onClick={() =>
+                              updateIngredientServing(
+                                ingredient.id,
+                                ingredient.servingMultiplier + 0.1
+                              )
+                            }
+                            style={{
+                              background: "#6c757d",
+                              color: "white",
+                              border: "none",
+                              borderRadius: "4px",
+                              width: "32px",
+                              height: "32px",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <Plus size={16} />
+                          </button>
                         </div>
                       </div>
                     </div>
 
-                    {/* Serving Size Adjustment */}
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "12px",
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: "14px",
-                          color: "#666",
-                          minWidth: "80px",
-                        }}
-                      >
-                        Serving:
-                      </span>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "8px",
-                        }}
-                      >
-                        <button
-                          onClick={() =>
-                            updateIngredientServing(
-                              ingredient.id,
-                              ingredient.servingMultiplier - 0.1
-                            )
-                          }
-                          style={{
-                            background: "#6c757d",
-                            color: "white",
-                            border: "none",
-                            borderRadius: "4px",
-                            width: "32px",
-                            height: "32px",
-                            cursor: "pointer",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                          }}
-                        >
-                          <Minus size={16} />
-                        </button>
-                        <input
-                          type="number"
-                          inputMode="decimal"
-                          step="0.1"
-                          min="0.1"
-                          max="10"
-                          value={ingredient.servingMultiplier.toFixed(1)}
-                          onChange={(e) => {
-                            const value = parseFloat(e.target.value);
-                            if (!isNaN(value) && value >= 0.1 && value <= 10) {
-                              updateIngredientServing(ingredient.id, value);
-                            }
-                          }}
-                          onBlur={(e) => {
-                            const value = parseFloat(e.target.value);
-                            if (isNaN(value) || value < 0.1) {
-                              updateIngredientServing(ingredient.id, 0.1);
-                            } else if (value > 10) {
-                              updateIngredientServing(ingredient.id, 10);
-                            } else {
-                              updateIngredientServing(ingredient.id, value);
-                            }
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.target.blur();
-                            }
-                          }}
-                          style={{
-                            width: "60px",
-                            textAlign: "center",
-                            fontWeight: "bold",
-                            fontSize: "16px",
-                            border: "2px solid #e9ecef",
-                            borderRadius: "4px",
-                            padding: "4px 8px",
-                            fontFamily: "inherit",
-                          }}
+                    {/* AdSense Ad Unit - Show after every 3 ingredients */}
+                    {(index + 1) % 3 === 0 && (
+                      <div style={{ marginTop: "16px", marginBottom: "16px" }}>
+                        <ins
+                          className="adsbygoogle"
+                          style={{ display: "block" }}
+                          data-ad-format="fluid"
+                          data-ad-layout-key="-gw-3+1f-3d+2z"
+                          data-ad-client="ca-pub-3121230953653374"
+                          data-ad-slot="9642404265"
                         />
-                        <span
+                        <div
                           style={{
-                            fontWeight: "bold",
-                            fontSize: "16px",
-                            color: "#666",
-                          }}
-                        >
-                          x
-                        </span>
-                        <button
-                          onClick={() =>
-                            updateIngredientServing(
-                              ingredient.id,
-                              ingredient.servingMultiplier + 0.1
-                            )
-                          }
-                          style={{
-                            background: "#6c757d",
-                            color: "white",
-                            border: "none",
+                            background: "#f8f9fa",
+                            padding: "10px",
+                            textAlign: "center",
+                            border: "1px solid #dee2e6",
                             borderRadius: "4px",
-                            width: "32px",
-                            height: "32px",
-                            cursor: "pointer",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
+                            fontSize: "12px",
+                            color: "#6c757d",
+                            marginTop: "8px",
                           }}
                         >
-                          <Plus size={16} />
-                        </button>
+                          Ad loading... (disable ad blocker if not showing)
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                  
-                  {/* AdSense Ad Unit - Show after every 3 ingredients */}
-                  {(index + 1) % 3 === 0 && (
-                    <div style={{ marginTop: "16px", marginBottom: "16px" }}>
-                      <ins 
-                        className="adsbygoogle"
-                        style={{ display: "block" }}
-                        data-ad-format="fluid"
-                        data-ad-layout-key="-gw-3+1f-3d+2z"
-                        data-ad-client="ca-pub-3121230953653374"
-                        data-ad-slot="9642404265"
-                      />
-                      <div 
-                        style={{ 
-                          background: "#f8f9fa", 
-                          padding: "10px", 
-                          textAlign: "center", 
-                          border: "1px solid #dee2e6",
-                          borderRadius: "4px",
-                          fontSize: "12px",
-                          color: "#6c757d",
-                          marginTop: "8px"
-                        }}
-                      >
-                        Ad loading... (disable ad blocker if not showing)
-                      </div>
-                    </div>
-                  )}
-                </React.Fragment>
+                    )}
+                  </React.Fragment>
                 ))}
               </div>
             )}
@@ -2316,6 +2401,52 @@ function AppContent() {
   );
 
   const renderHistoryTab = () => {
+    // Check if user is signed in
+    if (!isSignedIn) {
+      return (
+        <div className="card" style={{ textAlign: "center", padding: "40px" }}>
+          <h2 style={{ marginBottom: "20px" }}>📋 Meal History</h2>
+          <div
+            style={{
+              background: "#f8f9fa",
+              borderRadius: "12px",
+              padding: "30px",
+              border: "2px dashed #dee2e6",
+            }}
+          >
+            <History
+              size={48}
+              style={{ color: "#6c757d", marginBottom: "16px" }}
+            />
+            <h3 style={{ color: "#6c757d", marginBottom: "12px" }}>
+              Sign In Required
+            </h3>
+            <p style={{ color: "#6c757d", marginBottom: "20px" }}>
+              View your meal history and track your nutrition progress over
+              time.
+            </p>
+            <SignInButton mode="modal">
+              <button
+                style={{
+                  background: "#667eea",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  padding: "12px 24px",
+                  fontSize: "16px",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                  transition: "background 0.2s",
+                }}
+              >
+                Sign In to View History
+              </button>
+            </SignInButton>
+          </div>
+        </div>
+      );
+    }
+
     const stats = getDailyStats();
     const macroData = getMacroData();
 
@@ -2664,6 +2795,52 @@ function AppContent() {
   };
 
   const renderGoalsTab = () => {
+    // Check if user is signed in
+    if (!isSignedIn) {
+      return (
+        <div className="card" style={{ textAlign: "center", padding: "40px" }}>
+          <h2 style={{ marginBottom: "20px" }}>🎯 Yum Goals</h2>
+          <div
+            style={{
+              background: "#f8f9fa",
+              borderRadius: "12px",
+              padding: "30px",
+              border: "2px dashed #dee2e6",
+            }}
+          >
+            <Target
+              size={48}
+              style={{ color: "#6c757d", marginBottom: "16px" }}
+            />
+            <h3 style={{ color: "#6c757d", marginBottom: "12px" }}>
+              Sign In Required
+            </h3>
+            <p style={{ color: "#6c757d", marginBottom: "20px" }}>
+              Set nutrition goals, track your progress, and get personalized
+              recommendations.
+            </p>
+            <SignInButton mode="modal">
+              <button
+                style={{
+                  background: "#667eea",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  padding: "12px 24px",
+                  fontSize: "16px",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                  transition: "background 0.2s",
+                }}
+              >
+                Sign In to Set Goals
+              </button>
+            </SignInButton>
+          </div>
+        </div>
+      );
+    }
+
     const stats = getDailyStats();
     const macroData = getMacroData();
     const timeSeriesData = getTimeSeriesData();
@@ -3579,9 +3756,57 @@ function AppContent() {
 
 // Authentication Components (Email/Password)
 
-// Main App component with ClerkProvider
+// Anonymous token management
+const useAnonymousToken = () => {
+  const [anonymousToken, setAnonymousToken] = useState(
+    localStorage.getItem("yumlog_anonymous_token")
+  );
+
+  const generateAnonymousToken = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/generate-anonymous-token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        localStorage.setItem("yumlog_anonymous_token", data.token);
+        setAnonymousToken(data.token);
+        console.log("✅ Anonymous token generated:", data.anonymousId);
+        return data.token;
+      }
+    } catch (error) {
+      console.error("❌ Failed to generate anonymous token:", error);
+    }
+    return null;
+  };
+
+  const getValidToken = async () => {
+    if (anonymousToken) {
+      return anonymousToken;
+    }
+    return await generateAnonymousToken();
+  };
+
+  return { anonymousToken, generateAnonymousToken, getValidToken };
+};
+
+// Main App component with optional ClerkProvider
 function App() {
   const publishableKey = process.env.REACT_APP_CLERK_PUBLISHABLE_KEY;
+  const [showAuthPrompt, setShowAuthPrompt] = useState(false);
+
+  // Check URL parameters for auth prompts
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (
+      urlParams.get("signup") === "true" ||
+      urlParams.get("signin") === "true"
+    ) {
+      setShowAuthPrompt(true);
+    }
+  }, []);
 
   // Add detailed logging for debugging
   console.log("🔍 Clerk Environment Debug Info:");
@@ -3596,128 +3821,16 @@ function App() {
   console.log("- Node environment:", process.env.NODE_ENV);
   console.log("- Current URL:", window.location.href);
 
+  // If Clerk is not configured, use anonymous mode
   if (!publishableKey) {
-    console.error("❌ Clerk publishable key is missing!");
-    console.error("Environment variables available:", Object.keys(process.env));
+    console.log("🔓 Running in anonymous mode - Clerk not configured");
 
     return (
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          height: "100vh",
-          fontSize: "18px",
-          color: "#667eea",
-          flexDirection: "column",
-          padding: "20px",
-          textAlign: "center",
-        }}
-      >
-        <h2 style={{ marginBottom: "20px" }}>🔑 Configuration Error</h2>
-        <p style={{ marginBottom: "20px" }}>
-          Clerk publishable key not found. Please check your environment
-          variables.
-        </p>
-        <div
-          style={{
-            background: "#f8f9fa",
-            padding: "20px",
-            borderRadius: "8px",
-            fontSize: "14px",
-            textAlign: "left",
-            maxWidth: "600px",
-          }}
-        >
-          <h4>Debug Information:</h4>
-          <ul style={{ margin: "10px 0", paddingLeft: "20px" }}>
-            <li>Environment: {process.env.NODE_ENV}</li>
-            <li>URL: {window.location.href}</li>
-            <li>
-              REACT_APP_ variables:{" "}
-              {Object.keys(process.env)
-                .filter((key) => key.startsWith("REACT_APP_"))
-                .join(", ") || "None found"}
-            </li>
-          </ul>
-          <h4>How to fix:</h4>
-          <ol style={{ margin: "10px 0", paddingLeft: "20px" }}>
-            <li>
-              Check if <code>.env</code> file exists in the client directory
-            </li>
-            <li>
-              Verify <code>REACT_APP_CLERK_PUBLISHABLE_KEY</code> is set
-              correctly
-            </li>
-            <li>
-              Restart the development server after changing environment
-              variables
-            </li>
-            <li>
-              For production, ensure the environment variable is set in your
-              hosting platform
-            </li>
-          </ol>
-        </div>
-      </div>
-    );
-  }
-
-  // Validate the key format
-  if (!publishableKey.startsWith("pk_")) {
-    console.error("❌ Invalid Clerk publishable key format!");
-    console.error('Key should start with "pk_test_" or "pk_live_"');
-
-    return (
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          height: "100vh",
-          fontSize: "18px",
-          color: "#dc3545",
-          flexDirection: "column",
-          padding: "20px",
-          textAlign: "center",
-        }}
-      >
-        <h2 style={{ marginBottom: "20px" }}>🔑 Invalid Key Format</h2>
-        <p style={{ marginBottom: "20px" }}>
-          Clerk publishable key has invalid format. Key should start with
-          "pk_test_" or "pk_live_".
-        </p>
-        <div
-          style={{
-            background: "#f8d7da",
-            padding: "20px",
-            borderRadius: "8px",
-            fontSize: "14px",
-            textAlign: "left",
-            maxWidth: "600px",
-          }}
-        >
-          <h4>Current key format:</h4>
-          <code
-            style={{
-              background: "#fff",
-              padding: "4px 8px",
-              borderRadius: "4px",
-            }}
-          >
-            {publishableKey.substring(0, 20)}...
-          </code>
-          <h4 style={{ marginTop: "16px" }}>Expected format:</h4>
-          <code
-            style={{
-              background: "#fff",
-              padding: "4px 8px",
-              borderRadius: "4px",
-            }}
-          >
-            pk_test_... or pk_live_...
-          </code>
-        </div>
+      <div className="App">
+        <AppContentStandalone
+          showAuthPrompt={showAuthPrompt}
+          setShowAuthPrompt={setShowAuthPrompt}
+        />
       </div>
     );
   }
@@ -3730,6 +3843,1285 @@ function App() {
         <AppContent />
       </div>
     </ClerkProvider>
+  );
+}
+
+// Standalone version with working Clerk buttons (when Clerk is configured)
+function AppContentStandaloneWithClerk() {
+  const { getValidToken } = useAnonymousToken();
+  const [analysis, setAnalysis] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [mealDescription, setMealDescription] = useState("");
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [usageInfo, setUsageInfo] = useState({
+    usageCount: 0,
+    usageLimit: 3,
+    usageRemaining: 3,
+  });
+  const [showLimitModal, setShowLimitModal] = useState(false);
+
+  // Set up axios interceptor for anonymous tokens
+  useEffect(() => {
+    const interceptor = api.interceptors.request.use(async (config) => {
+      try {
+        const token = await getValidToken();
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      } catch (error) {
+        console.error("Error getting anonymous token:", error);
+      }
+      return config;
+    });
+
+    return () => {
+      api.interceptors.request.eject(interceptor);
+    };
+  }, [getValidToken]);
+
+  const analyzeFood = async () => {
+    if ((!selectedImage && !mealDescription.trim()) || isAnalyzing) return;
+    setIsAnalyzing(true);
+
+    try {
+      let data;
+      if (selectedImage) {
+        // Image analysis
+        const formData = new FormData();
+        formData.append("image", selectedImage);
+        if (mealDescription.trim()) {
+          formData.append("note", mealDescription.trim());
+        }
+
+        data = await api.post("/analyze-food-only", formData, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        });
+      } else {
+        // Text-only analysis
+        data = await api.post("/analyze-text-only", {
+          description: mealDescription.trim(),
+        });
+      }
+      setAnalysis(data.data.analysis);
+
+      // Update usage info if provided
+      if (data.data.usageInfo) {
+        setUsageInfo(data.data.usageInfo);
+      }
+    } catch (error) {
+      console.error("Error analyzing food:", error);
+
+      // Check if it's a usage limit error
+      if (error.response && error.response.status === 429) {
+        const errorData = error.response.data;
+        if (errorData.requiresSignUp) {
+          setUsageInfo({
+            usageCount: errorData.usageCount,
+            usageLimit: errorData.usageLimit,
+            usageRemaining: 0,
+          });
+          setShowLimitModal(true);
+          return;
+        }
+      }
+
+      alert("Failed to analyze food. Please try again.");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setSelectedImage(file);
+      const reader = new FileReader();
+      reader.onload = (e) => setImagePreview(e.target.result);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+        padding: "20px",
+        fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+      }}
+    >
+      <div style={{ maxWidth: "600px", margin: "0 auto" }}>
+        <div
+          style={{ textAlign: "center", marginBottom: "30px", color: "white" }}
+        >
+          <h1 style={{ fontSize: "2.5rem", marginBottom: "10px" }}>
+            🍽️ Yumlog
+          </h1>
+          <p style={{ fontSize: "1.2rem", opacity: 0.9 }}>
+            Try food analysis without signing up!
+          </p>
+        </div>
+
+        <div className="card">
+          <h2 style={{ textAlign: "center", marginBottom: "20px" }}>
+            🔍 Analyze Your Food
+          </h2>
+
+          {/* Working sign-in/sign-up buttons */}
+          <div
+            style={{
+              background: "#e7f3ff",
+              borderRadius: "8px",
+              padding: "16px",
+              marginBottom: "20px",
+              border: "1px solid #b3d9ff",
+              textAlign: "center",
+            }}
+          >
+            <p
+              style={{
+                margin: "0 0 12px 0",
+                color: "#0066cc",
+                fontSize: "14px",
+              }}
+            >
+              🎉 <strong>Try it out!</strong> Analyze food without signing up.
+            </p>
+            <div
+              style={{
+                display: "flex",
+                gap: "12px",
+                justifyContent: "center",
+                flexWrap: "wrap",
+              }}
+            >
+              <SignUpButton mode="modal">
+                <button
+                  style={{
+                    background: "#667eea",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    padding: "8px 16px",
+                    fontSize: "14px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                  }}
+                >
+                  Sign Up for Full Features
+                </button>
+              </SignUpButton>
+              <SignInButton mode="modal">
+                <button
+                  style={{
+                    background: "transparent",
+                    color: "#0066cc",
+                    border: "2px solid #0066cc",
+                    borderRadius: "6px",
+                    padding: "8px 16px",
+                    fontSize: "14px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                  }}
+                >
+                  Sign In
+                </button>
+              </SignInButton>
+            </div>
+          </div>
+
+          {/* Usage Counter for Anonymous Users */}
+          <div
+            style={{
+              background: usageInfo.usageRemaining <= 1 ? "#fff3cd" : "#d1ecf1",
+              borderRadius: "8px",
+              padding: "12px",
+              marginBottom: "20px",
+              border: `1px solid ${
+                usageInfo.usageRemaining <= 1 ? "#ffeaa7" : "#bee5eb"
+              }`,
+              textAlign: "center",
+            }}
+          >
+            <p
+              style={{
+                margin: "0",
+                color: usageInfo.usageRemaining <= 1 ? "#856404" : "#0c5460",
+                fontSize: "14px",
+                fontWeight: "600",
+              }}
+            >
+              {usageInfo.usageRemaining > 0 ? (
+                <>
+                  🔥{" "}
+                  <strong>
+                    {usageInfo.usageRemaining} free analyses remaining
+                  </strong>{" "}
+                  out of {usageInfo.usageLimit}
+                </>
+              ) : (
+                <>
+                  ⚠️ <strong>No free analyses remaining</strong> - Sign up to
+                  continue!
+                </>
+              )}
+            </p>
+          </div>
+
+          {/* AppContentStandaloneWithClerk analyze button */}
+
+          {/* Unified Input Section */}
+          <div style={{ marginBottom: "24px" }}>
+            <div
+              style={{
+                border: "2px solid #e9ecef",
+                borderRadius: "8px",
+                background: "white",
+                overflow: "hidden",
+              }}
+            >
+              {/* Photo Upload Section */}
+              <div
+                style={{
+                  padding: "20px",
+                  textAlign: "center",
+                  borderBottom: "1px solid #e9ecef",
+                }}
+              >
+                <input
+                  id="image-upload"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  style={{ display: "none" }}
+                />
+                <label
+                  htmlFor="image-upload"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    background: "#667eea",
+                    color: "white",
+                    padding: "12px 20px",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    fontSize: "16px",
+                    fontWeight: "600",
+                    border: "none",
+                  }}
+                >
+                  <Image size={20} />
+                  Upload Photo
+                </label>
+                <p
+                  style={{
+                    margin: "12px 0 0 0",
+                    color: "#666",
+                    fontSize: "14px",
+                  }}
+                >
+                  Take a photo of your meal for analysis
+                </p>
+              </div>
+
+              {/* Text Input Section */}
+              <div style={{ padding: "20px" }}>
+                <textarea
+                  value={mealDescription}
+                  onChange={(e) => setMealDescription(e.target.value)}
+                  placeholder="Or describe your meal in text... (e.g., 'grilled chicken breast with rice and broccoli')"
+                  style={{
+                    width: "100%",
+                    minHeight: "80px",
+                    padding: "12px",
+                    border: "2px solid #e9ecef",
+                    borderRadius: "8px",
+                    fontSize: "16px",
+                    fontFamily: "inherit",
+                    resize: "vertical",
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Image Preview */}
+          {imagePreview && (
+            <div style={{ marginBottom: "20px", textAlign: "center" }}>
+              <img
+                src={imagePreview}
+                alt="Food preview"
+                style={{
+                  maxWidth: "100%",
+                  maxHeight: "300px",
+                  borderRadius: "8px",
+                  border: "2px solid #e9ecef",
+                }}
+              />
+            </div>
+          )}
+
+          <button
+            onClick={analyzeFood}
+            disabled={
+              (!selectedImage && !mealDescription.trim()) ||
+              isAnalyzing ||
+              usageInfo.usageRemaining <= 0
+            }
+            style={{
+              width: "100%",
+              background:
+                (!selectedImage && !mealDescription.trim()) ||
+                isAnalyzing ||
+                usageInfo.usageRemaining <= 0
+                  ? "#6c757d"
+                  : "#667eea",
+              color: "white",
+              border: "none",
+              borderRadius: "8px",
+              padding: "16px",
+              fontSize: "18px",
+              fontWeight: "600",
+              cursor:
+                (!selectedImage && !mealDescription.trim()) ||
+                isAnalyzing ||
+                usageInfo.usageRemaining <= 0
+                  ? "not-allowed"
+                  : "pointer",
+              marginBottom: "20px",
+            }}
+          >
+            {isAnalyzing
+              ? "Analyzing..."
+              : usageInfo.usageRemaining <= 0
+              ? "Sign Up to Continue"
+              : "🔍 Analyze Food"}
+          </button>
+
+          {analysis && (
+            <div style={{ marginTop: "24px" }}>
+              <h3 style={{ marginBottom: "16px" }}>📊 Nutrition Analysis</h3>
+
+              <div
+                style={{
+                  padding: "20px",
+                  background: "#f8f9fa",
+                  borderRadius: "8px",
+                  marginBottom: "20px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+                    gap: "16px",
+                  }}
+                >
+                  <div style={{ textAlign: "center" }}>
+                    <div
+                      style={{
+                        fontSize: "24px",
+                        fontWeight: "bold",
+                        color: "#667eea",
+                      }}
+                    >
+                      {Math.round(analysis.total_calories)}
+                    </div>
+                    <div style={{ fontSize: "14px", color: "#666" }}>
+                      Calories
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "center" }}>
+                    <div
+                      style={{
+                        fontSize: "24px",
+                        fontWeight: "bold",
+                        color: "#667eea",
+                      }}
+                    >
+                      {Math.round(analysis.total_protein)}g
+                    </div>
+                    <div style={{ fontSize: "14px", color: "#666" }}>
+                      Protein
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "center" }}>
+                    <div
+                      style={{
+                        fontSize: "24px",
+                        fontWeight: "bold",
+                        color: "#667eea",
+                      }}
+                    >
+                      {Math.round(analysis.total_carbs)}g
+                    </div>
+                    <div style={{ fontSize: "14px", color: "#666" }}>Carbs</div>
+                  </div>
+                  <div style={{ textAlign: "center" }}>
+                    <div
+                      style={{
+                        fontSize: "24px",
+                        fontWeight: "bold",
+                        color: "#667eea",
+                      }}
+                    >
+                      {Math.round(analysis.total_fat)}g
+                    </div>
+                    <div style={{ fontSize: "14px", color: "#666" }}>Fat</div>
+                  </div>
+                </div>
+              </div>
+
+              {analysis.foods && analysis.foods.length > 0 && (
+                <div>
+                  <h4 style={{ marginBottom: "12px" }}>🥗 Detected Foods</h4>
+                  {analysis.foods.map((food, index) => (
+                    <div
+                      key={index}
+                      style={{
+                        marginBottom: "12px",
+                        padding: "16px",
+                        border: "1px solid #e9ecef",
+                        borderRadius: "8px",
+                        background: "white",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontWeight: "bold",
+                          fontSize: "16px",
+                          marginBottom: "4px",
+                        }}
+                      >
+                        {food.name}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "14px",
+                          color: "#666",
+                          marginBottom: "8px",
+                        }}
+                      >
+                        {food.estimated_quantity}
+                      </div>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns:
+                            "repeat(auto-fit, minmax(80px, 1fr))",
+                          gap: "8px",
+                          fontSize: "14px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            textAlign: "center",
+                            padding: "4px",
+                            background: "#f8f9fa",
+                            borderRadius: "4px",
+                          }}
+                        >
+                          <div style={{ fontWeight: "bold" }}>
+                            {Math.round(food.calories)}
+                          </div>
+                          <div style={{ color: "#666" }}>cal</div>
+                        </div>
+                        <div
+                          style={{
+                            textAlign: "center",
+                            padding: "4px",
+                            background: "#f8f9fa",
+                            borderRadius: "4px",
+                          }}
+                        >
+                          <div style={{ fontWeight: "bold" }}>
+                            {Math.round(food.protein)}g
+                          </div>
+                          <div style={{ color: "#666" }}>protein</div>
+                        </div>
+                        <div
+                          style={{
+                            textAlign: "center",
+                            padding: "4px",
+                            background: "#f8f9fa",
+                            borderRadius: "4px",
+                          }}
+                        >
+                          <div style={{ fontWeight: "bold" }}>
+                            {Math.round(food.carbs)}g
+                          </div>
+                          <div style={{ color: "#666" }}>carbs</div>
+                        </div>
+                        <div
+                          style={{
+                            textAlign: "center",
+                            padding: "4px",
+                            background: "#f8f9fa",
+                            borderRadius: "4px",
+                          }}
+                        >
+                          <div style={{ fontWeight: "bold" }}>
+                            {Math.round(food.fat)}g
+                          </div>
+                          <div style={{ color: "#666" }}>fat</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <button
+                onClick={() => {
+                  setAnalysis(null);
+                  setMealDescription("");
+                  setSelectedImage(null);
+                  setImagePreview(null);
+                  const fileInput = document.getElementById("image-upload");
+                  if (fileInput) fileInput.value = "";
+                }}
+                style={{
+                  width: "100%",
+                  background: "#6c757d",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  padding: "12px",
+                  fontSize: "16px",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                  marginTop: "16px",
+                }}
+              >
+                🔄 Analyze Another Meal
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div
+          style={{
+            textAlign: "center",
+            marginTop: "30px",
+            color: "white",
+            opacity: 0.8,
+          }}
+        >
+          <p>
+            Want to save your meals and track progress? Sign up for the full
+            experience!
+          </p>
+        </div>
+      </div>
+
+      {/* Usage Limit Modal */}
+      {showLimitModal && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0, 0, 0, 0.7)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 1000,
+            padding: "20px",
+          }}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: "16px",
+              padding: "30px",
+              maxWidth: "500px",
+              width: "100%",
+              textAlign: "center",
+            }}
+          >
+            <h2 style={{ marginBottom: "20px", color: "#333" }}>
+              🚫 Usage Limit Reached
+            </h2>
+            <p
+              style={{ marginBottom: "20px", color: "#666", lineHeight: "1.5" }}
+            >
+              You've used all {usageInfo.usageLimit} free food analyses. To
+              continue analyzing food and access additional features, please
+              sign up for a free account.
+            </p>
+            <div
+              style={{
+                background: "#f8f9fa",
+                padding: "16px",
+                borderRadius: "8px",
+                marginBottom: "20px",
+                textAlign: "left",
+              }}
+            >
+              <h4 style={{ margin: "0 0 8px 0", color: "#333" }}>
+                What you get with a free account:
+              </h4>
+              <ul
+                style={{
+                  margin: "8px 0",
+                  paddingLeft: "20px",
+                  fontSize: "14px",
+                  color: "#666",
+                }}
+              >
+                <li>Unlimited food analysis</li>
+                <li>Save your meals and track progress</li>
+                <li>Set nutrition goals</li>
+                <li>View your meal history</li>
+                <li>Personalized recommendations</li>
+              </ul>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                gap: "12px",
+                justifyContent: "center",
+                flexWrap: "wrap",
+              }}
+            >
+              <SignUpButton mode="modal">
+                <button
+                  style={{
+                    background: "#667eea",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "8px",
+                    padding: "12px 24px",
+                    fontSize: "16px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                  }}
+                >
+                  Sign Up Now
+                </button>
+              </SignUpButton>
+              <button
+                onClick={() => setShowLimitModal(false)}
+                style={{
+                  background: "transparent",
+                  color: "#6c757d",
+                  border: "2px solid #6c757d",
+                  borderRadius: "8px",
+                  padding: "12px 24px",
+                  fontSize: "16px",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                }}
+              >
+                Maybe Later
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Standalone version that works without Clerk
+function AppContentStandalone({ showAuthPrompt, setShowAuthPrompt }) {
+  const { getValidToken } = useAnonymousToken();
+  const [analysis, setAnalysis] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [mealDescription, setMealDescription] = useState("");
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+
+  // Set up axios interceptor for anonymous tokens
+  useEffect(() => {
+    const interceptor = api.interceptors.request.use(async (config) => {
+      try {
+        const token = await getValidToken();
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      } catch (error) {
+        console.error("Error getting anonymous token:", error);
+      }
+      return config;
+    });
+
+    return () => {
+      api.interceptors.request.eject(interceptor);
+    };
+  }, [getValidToken]);
+
+  const analyzeFood = async () => {
+    if ((!selectedImage && !mealDescription.trim()) || isAnalyzing) return;
+    setIsAnalyzing(true);
+
+    try {
+      let data;
+      if (selectedImage) {
+        // Image analysis
+        const formData = new FormData();
+        formData.append("image", selectedImage);
+        if (mealDescription.trim()) {
+          formData.append("note", mealDescription.trim());
+        }
+
+        data = await api.post("/analyze-food-only", formData, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        });
+      } else {
+        // Text-only analysis
+        data = await api.post("/analyze-text-only", {
+          description: mealDescription.trim(),
+        });
+      }
+      setAnalysis(data.data.analysis);
+    } catch (error) {
+      console.error("Error analyzing food:", error);
+      alert("Failed to analyze food. Please try again.");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setSelectedImage(file);
+      const reader = new FileReader();
+      reader.onload = (e) => setImagePreview(e.target.result);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+        padding: "20px",
+        fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+      }}
+    >
+      <div style={{ maxWidth: "600px", margin: "0 auto" }}>
+        <div
+          style={{ textAlign: "center", marginBottom: "30px", color: "white" }}
+        >
+          <h1 style={{ fontSize: "2.5rem", marginBottom: "10px" }}>
+            🍽️ Yumlog
+          </h1>
+          <p style={{ fontSize: "1.2rem", opacity: 0.9 }}>
+            Try food analysis without signing up!
+          </p>
+        </div>
+
+        <div className="card">
+          <h2 style={{ textAlign: "center", marginBottom: "20px" }}>
+            🔍 Analyze Your Food
+          </h2>
+
+          {/* Anonymous user notice with sign-in option */}
+          <div
+            style={{
+              background: "#e7f3ff",
+              borderRadius: "8px",
+              padding: "16px",
+              marginBottom: "20px",
+              border: "1px solid #b3d9ff",
+              textAlign: "center",
+            }}
+          >
+            <p
+              style={{
+                margin: "0 0 12px 0",
+                color: "#0066cc",
+                fontSize: "14px",
+              }}
+            >
+              🎉 <strong>Try it out!</strong> Analyze food without signing up.
+            </p>
+            <div
+              style={{
+                display: "flex",
+                gap: "12px",
+                justifyContent: "center",
+                flexWrap: "wrap",
+              }}
+            >
+              <button
+                onClick={() => setShowAuthPrompt(true)}
+                style={{
+                  background: "#667eea",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "6px",
+                  padding: "8px 16px",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                }}
+              >
+                Sign Up for Full Features
+              </button>
+              <button
+                onClick={() => setShowAuthPrompt(true)}
+                style={{
+                  background: "transparent",
+                  color: "#0066cc",
+                  border: "2px solid #0066cc",
+                  borderRadius: "6px",
+                  padding: "8px 16px",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                }}
+              >
+                Sign In
+              </button>
+            </div>
+          </div>
+
+          {/* Unified Input Section */}
+          <div style={{ marginBottom: "24px" }}>
+            <div
+              style={{
+                border: "2px solid #e9ecef",
+                borderRadius: "8px",
+                background: "white",
+                overflow: "hidden",
+              }}
+            >
+              {/* Photo Upload Section */}
+              <div
+                style={{
+                  padding: "20px",
+                  textAlign: "center",
+                  borderBottom: "1px solid #e9ecef",
+                }}
+              >
+                <input
+                  id="image-upload"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  style={{ display: "none" }}
+                />
+                <label
+                  htmlFor="image-upload"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    background: "#667eea",
+                    color: "white",
+                    padding: "12px 20px",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    fontSize: "16px",
+                    fontWeight: "600",
+                    border: "none",
+                  }}
+                >
+                  <Image size={20} />
+                  Upload Photo
+                </label>
+                <p
+                  style={{
+                    margin: "12px 0 0 0",
+                    color: "#666",
+                    fontSize: "14px",
+                  }}
+                >
+                  Take a photo of your meal for analysis
+                </p>
+              </div>
+
+              {/* Text Input Section */}
+              <div style={{ padding: "20px" }}>
+                <textarea
+                  value={mealDescription}
+                  onChange={(e) => setMealDescription(e.target.value)}
+                  placeholder="Or describe your meal in text... (e.g., 'grilled chicken breast with rice and broccoli')"
+                  style={{
+                    width: "100%",
+                    minHeight: "80px",
+                    padding: "12px",
+                    border: "2px solid #e9ecef",
+                    borderRadius: "8px",
+                    fontSize: "16px",
+                    fontFamily: "inherit",
+                    resize: "vertical",
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Image Preview */}
+          {imagePreview && (
+            <div style={{ marginBottom: "20px", textAlign: "center" }}>
+              <img
+                src={imagePreview}
+                alt="Food preview"
+                style={{
+                  maxWidth: "100%",
+                  maxHeight: "300px",
+                  borderRadius: "8px",
+                  border: "2px solid #e9ecef",
+                }}
+              />
+            </div>
+          )}
+
+          <button
+            onClick={analyzeFood}
+            disabled={
+              (!selectedImage && !mealDescription.trim()) || isAnalyzing
+            }
+            style={{
+              width: "100%",
+              background:
+                (!selectedImage && !mealDescription.trim()) || isAnalyzing
+                  ? "#6c757d"
+                  : "#667eea",
+              color: "white",
+              border: "none",
+              borderRadius: "8px",
+              padding: "16px",
+              fontSize: "18px",
+              fontWeight: "600",
+              cursor:
+                (!selectedImage && !mealDescription.trim()) || isAnalyzing
+                  ? "not-allowed"
+                  : "pointer",
+              marginBottom: "20px",
+            }}
+          >
+            {isAnalyzing ? "Analyzing..." : "🔍 Analyze Food"}
+          </button>
+
+          {analysis && (
+            <div style={{ marginTop: "24px" }}>
+              <h3 style={{ marginBottom: "16px" }}>📊 Nutrition Analysis</h3>
+
+              <div
+                style={{
+                  padding: "20px",
+                  background: "#f8f9fa",
+                  borderRadius: "8px",
+                  marginBottom: "20px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+                    gap: "16px",
+                  }}
+                >
+                  <div style={{ textAlign: "center" }}>
+                    <div
+                      style={{
+                        fontSize: "24px",
+                        fontWeight: "bold",
+                        color: "#667eea",
+                      }}
+                    >
+                      {Math.round(analysis.total_calories)}
+                    </div>
+                    <div style={{ fontSize: "14px", color: "#666" }}>
+                      Calories
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "center" }}>
+                    <div
+                      style={{
+                        fontSize: "24px",
+                        fontWeight: "bold",
+                        color: "#667eea",
+                      }}
+                    >
+                      {Math.round(analysis.total_protein)}g
+                    </div>
+                    <div style={{ fontSize: "14px", color: "#666" }}>
+                      Protein
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "center" }}>
+                    <div
+                      style={{
+                        fontSize: "24px",
+                        fontWeight: "bold",
+                        color: "#667eea",
+                      }}
+                    >
+                      {Math.round(analysis.total_carbs)}g
+                    </div>
+                    <div style={{ fontSize: "14px", color: "#666" }}>Carbs</div>
+                  </div>
+                  <div style={{ textAlign: "center" }}>
+                    <div
+                      style={{
+                        fontSize: "24px",
+                        fontWeight: "bold",
+                        color: "#667eea",
+                      }}
+                    >
+                      {Math.round(analysis.total_fat)}g
+                    </div>
+                    <div style={{ fontSize: "14px", color: "#666" }}>Fat</div>
+                  </div>
+                </div>
+              </div>
+
+              {analysis.foods && analysis.foods.length > 0 && (
+                <div>
+                  <h4 style={{ marginBottom: "12px" }}>🥗 Detected Foods</h4>
+                  {analysis.foods.map((food, index) => (
+                    <div
+                      key={index}
+                      style={{
+                        marginBottom: "12px",
+                        padding: "16px",
+                        border: "1px solid #e9ecef",
+                        borderRadius: "8px",
+                        background: "white",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontWeight: "bold",
+                          fontSize: "16px",
+                          marginBottom: "4px",
+                        }}
+                      >
+                        {food.name}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "14px",
+                          color: "#666",
+                          marginBottom: "8px",
+                        }}
+                      >
+                        {food.estimated_quantity}
+                      </div>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns:
+                            "repeat(auto-fit, minmax(80px, 1fr))",
+                          gap: "8px",
+                          fontSize: "14px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            textAlign: "center",
+                            padding: "4px",
+                            background: "#f8f9fa",
+                            borderRadius: "4px",
+                          }}
+                        >
+                          <div style={{ fontWeight: "bold" }}>
+                            {Math.round(food.calories)}
+                          </div>
+                          <div style={{ color: "#666" }}>cal</div>
+                        </div>
+                        <div
+                          style={{
+                            textAlign: "center",
+                            padding: "4px",
+                            background: "#f8f9fa",
+                            borderRadius: "4px",
+                          }}
+                        >
+                          <div style={{ fontWeight: "bold" }}>
+                            {Math.round(food.protein)}g
+                          </div>
+                          <div style={{ color: "#666" }}>protein</div>
+                        </div>
+                        <div
+                          style={{
+                            textAlign: "center",
+                            padding: "4px",
+                            background: "#f8f9fa",
+                            borderRadius: "4px",
+                          }}
+                        >
+                          <div style={{ fontWeight: "bold" }}>
+                            {Math.round(food.carbs)}g
+                          </div>
+                          <div style={{ color: "#666" }}>carbs</div>
+                        </div>
+                        <div
+                          style={{
+                            textAlign: "center",
+                            padding: "4px",
+                            background: "#f8f9fa",
+                            borderRadius: "4px",
+                          }}
+                        >
+                          <div style={{ fontWeight: "bold" }}>
+                            {Math.round(food.fat)}g
+                          </div>
+                          <div style={{ color: "#666" }}>fat</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <button
+                onClick={() => {
+                  setAnalysis(null);
+                  setMealDescription("");
+                  setSelectedImage(null);
+                  setImagePreview(null);
+                  const fileInput = document.getElementById("image-upload");
+                  if (fileInput) fileInput.value = "";
+                }}
+                style={{
+                  width: "100%",
+                  background: "#6c757d",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  padding: "12px",
+                  fontSize: "16px",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                  marginTop: "16px",
+                }}
+              >
+                🔄 Analyze Another Meal
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div
+          style={{
+            textAlign: "center",
+            marginTop: "30px",
+            color: "white",
+            opacity: 0.8,
+          }}
+        >
+          <p>
+            Want to save your meals and track progress? Sign up for the full
+            experience!
+          </p>
+        </div>
+      </div>
+
+      {/* Auth Setup Prompt Modal */}
+      {showAuthPrompt && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0, 0, 0, 0.7)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 1000,
+            padding: "20px",
+          }}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: "16px",
+              padding: "30px",
+              maxWidth: "500px",
+              width: "100%",
+              textAlign: "center",
+            }}
+          >
+            <h2 style={{ marginBottom: "20px", color: "#333" }}>
+              🔐 Authentication Setup Required
+            </h2>
+            <p
+              style={{ marginBottom: "20px", color: "#666", lineHeight: "1.5" }}
+            >
+              To enable sign-up and user accounts, this app needs to be
+              configured with Clerk authentication. This is typically done by
+              the app developer.
+            </p>
+            <div
+              style={{
+                background: "#f8f9fa",
+                padding: "16px",
+                borderRadius: "8px",
+                marginBottom: "20px",
+                textAlign: "left",
+              }}
+            >
+              <h4 style={{ margin: "0 0 8px 0", color: "#333" }}>
+                For developers:
+              </h4>
+              <ol
+                style={{
+                  margin: "8px 0",
+                  paddingLeft: "20px",
+                  fontSize: "14px",
+                  color: "#666",
+                }}
+              >
+                <li>Sign up for a free Clerk account at clerk.dev</li>
+                <li>Create a new application</li>
+                <li>Copy your publishable key</li>
+                <li>
+                  Add it to your .env file as REACT_APP_CLERK_PUBLISHABLE_KEY
+                </li>
+                <li>Restart the development server</li>
+              </ol>
+            </div>
+            <p
+              style={{ marginBottom: "20px", color: "#666", fontSize: "14px" }}
+            >
+              In the meantime, you can continue using the app anonymously to
+              analyze food!
+            </p>
+            <button
+              onClick={() => {
+                setShowAuthPrompt(false);
+                // Clear URL parameters
+                window.history.replaceState(
+                  {},
+                  document.title,
+                  window.location.pathname
+                );
+              }}
+              style={{
+                background: "#667eea",
+                color: "white",
+                border: "none",
+                borderRadius: "8px",
+                padding: "12px 24px",
+                fontSize: "16px",
+                fontWeight: "600",
+                cursor: "pointer",
+              }}
+            >
+              Continue Using Anonymously
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

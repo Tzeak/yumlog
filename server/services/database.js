@@ -148,7 +148,27 @@ function initDatabase() {
                 });
               } else {
                 console.log("✅ All columns already exist");
-                resolve();
+
+                // Create anonymous usage tracking table
+                const createUsageTableQuery = `
+                CREATE TABLE IF NOT EXISTS anonymous_usage (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  anonymous_id TEXT UNIQUE NOT NULL,
+                  usage_count INTEGER DEFAULT 0,
+                  first_used DATETIME DEFAULT CURRENT_TIMESTAMP,
+                  last_used DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+              `;
+
+                db.run(createUsageTableQuery, (err) => {
+                  if (err) {
+                    console.error("Error creating anonymous usage table:", err);
+                    reject(err);
+                    return;
+                  }
+                  console.log("✅ Anonymous usage table ready");
+                  resolve();
+                });
               }
             });
           });
@@ -189,6 +209,43 @@ function getUserById(userId) {
       }
 
       resolve(row);
+    });
+  });
+}
+
+// Track anonymous user usage
+function trackAnonymousUsage(anonymousId) {
+  return new Promise((resolve, reject) => {
+    const query = `
+      INSERT OR REPLACE INTO anonymous_usage (anonymous_id, usage_count, last_used)
+      VALUES (?, COALESCE((SELECT usage_count + 1 FROM anonymous_usage WHERE anonymous_id = ?), 1), CURRENT_TIMESTAMP)
+    `;
+
+    db.run(query, [anonymousId, anonymousId], function (err) {
+      if (err) {
+        console.error("Error tracking anonymous usage:", err);
+        reject(err);
+        return;
+      }
+
+      resolve(this.changes);
+    });
+  });
+}
+
+// Get anonymous user usage count
+function getAnonymousUsage(anonymousId) {
+  return new Promise((resolve, reject) => {
+    const query = "SELECT * FROM anonymous_usage WHERE anonymous_id = ?";
+
+    db.get(query, [anonymousId], (err, row) => {
+      if (err) {
+        console.error("Error fetching anonymous usage:", err);
+        reject(err);
+        return;
+      }
+
+      resolve(row || { usage_count: 0, first_used: null, last_used: null });
     });
   });
 }
@@ -516,4 +573,6 @@ module.exports = {
   getGoal,
   updateGoal,
   deleteGoal,
+  trackAnonymousUsage,
+  getAnonymousUsage,
 };
