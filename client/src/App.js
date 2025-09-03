@@ -204,6 +204,44 @@ function AppContent() {
     }
   }, [isSignedIn]);
 
+  // Initialize AdSense ads when ingredients are rendered
+  useEffect(() => {
+    if (editableIngredients.length > 0) {
+      const timer = setTimeout(() => {
+        if (typeof window !== 'undefined' && window.adsbygoogle) {
+          try {
+            // Find all uninitialized ad elements
+            const adElements = document.querySelectorAll('ins.adsbygoogle:not([data-ad-status])');
+            console.log('Found', adElements.length, 'ad elements to initialize');
+            adElements.forEach((element) => {
+              try {
+                window.adsbygoogle.push({});
+                console.log('Ad initialized successfully');
+                
+                // Check ad status after a delay
+                setTimeout(() => {
+                  const status = element.getAttribute('data-ad-status');
+                  console.log('Ad status:', status);
+                  if (status === 'unfilled') {
+                    console.log('Ad slot unfilled - might be due to ad blockers or account status');
+                  }
+                }, 2000);
+              } catch (error) {
+                console.log('Ad initialization error:', error);
+              }
+            });
+          } catch (error) {
+            console.log('AdSense initialization error:', error);
+          }
+        } else {
+          console.log('AdSense script not loaded yet');
+        }
+      }, 500); // Wait 500ms for DOM to be ready
+
+      return () => clearTimeout(timer);
+    }
+  }, [editableIngredients]);
+
   useEffect(() => {
     if (isSignedIn) {
       fetchMeals();
@@ -2117,14 +2155,7 @@ function AppContent() {
                   
                   {/* AdSense Ad Unit - Show after every 3 ingredients */}
                   {(index + 1) % 3 === 0 && (
-                    <div 
-                      style={{ marginTop: "16px", marginBottom: "16px" }}
-                      ref={(el) => {
-                        if (el && typeof window !== 'undefined' && window.adsbygoogle) {
-                          window.adsbygoogle.push({});
-                        }
-                      }}
-                    >
+                    <div style={{ marginTop: "16px", marginBottom: "16px" }}>
                       <ins 
                         className="adsbygoogle"
                         style={{ display: "block" }}
@@ -2133,6 +2164,20 @@ function AppContent() {
                         data-ad-client="ca-pub-3121230953653374"
                         data-ad-slot="9642404265"
                       />
+                      <div 
+                        style={{ 
+                          background: "#f8f9fa", 
+                          padding: "10px", 
+                          textAlign: "center", 
+                          border: "1px solid #dee2e6",
+                          borderRadius: "4px",
+                          fontSize: "12px",
+                          color: "#6c757d",
+                          marginTop: "8px"
+                        }}
+                      >
+                        Ad loading... (disable ad blocker if not showing)
+                      </div>
                     </div>
                   )}
                 </React.Fragment>
